@@ -1,16 +1,100 @@
-# React + Vite
+# Corazón Migrante – Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Este repositorio contiene el **frontend oficial de la plataforma Corazón Migrante**, desarrollado con **React + Vite**. El objetivo principal del frontend es ofrecer una experiencia clara, accesible y emocionalmente cuidada para personas migrantes y sus familias.
 
-Currently, two official plugins are available:
+La aplicación se encarga de la **interfaz pública**, la navegación, los formularios y la comunicación con los servicios del backend.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## 🧱 Tecnologías utilizadas
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **React** – Construcción de interfaces de usuario
+- **Vite** – Entorno de desarrollo y build de alto rendimiento
+- **JavaScript (ESM)** – Módulos modernos
+- **ESLint** – Control de calidad y consistencia del código
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 📁 Estructura del proyecto
+
+```text
+src/
+├── assets/            # Imágenes, íconos y recursos estáticos
+├── components/        # Componentes reutilizables
+├── modules/           # Módulos funcionales (landing, auth, vistas públicas, etc.)
+├── hooks/             # Custom hooks
+├── services/          # Comunicación con APIs
+├── helpers/           # Utilidades compartidas
+└── main.jsx           # Punto de entrada de la aplicación
+```
+
+Archivos principales en la raíz:
+- `index.html`
+- `vite.config.js`
+- `package.json`
+- `eslint.config.js`
+- `.gitignore`
+
+---
+
+## ▶️ Ejecución en entorno de desarrollo
+
+Instalar dependencias:
+
+```bash
+npm install
+```
+
+Levantar el servidor de desarrollo:
+
+```bash
+npm run dev
+```
+
+La aplicación estará disponible en:
+
+```
+http://localhost:5173
+```
+
+---
+
+## 🏗️ Build para producción
+
+Para generar la versión optimizada de producción:
+
+```bash
+npm run build
+```
+
+El resultado se genera en la carpeta `dist/`, la cual **no se versiona** en el repositorio.
+
+---
+
+## 🔐 Variables de entorno
+
+Las variables de entorno no se suben al repositorio.
+
+Debe utilizarse un archivo `.env` local basado en:
+
+```
+.env.example
+```
+
+---
+
+## 🎯 Enfoque del proyecto
+
+El frontend de **Corazón Migrante** está diseñado con un enfoque humano y social, priorizando:
+
+- Claridad visual y accesibilidad
+- Buen rendimiento y tiempos de carga
+- Código modular y mantenible
+- Escalabilidad a largo plazo
+
+---
+
+## 📌 Notas finales
+
+Este frontend está pensado para integrarse directamente con el backend del proyecto Corazón Migrante. Cualquier modificación debe respetar la estructura y las convenciones definidas en el proyecto.
+
