@@ -135,7 +135,7 @@ export function useVistasPublicasAdmin(session) {
                     storage: FILE_SERVER_NAME,
                     ...(prefix ? { prefix } : {}),
                 };
-                const res = await createApiConn(UI_ENDPOINTS.FILES_LIST, payload, "GET", session);
+                const res = await createApiConn(UI_ENDPOINTS.FILES_LIST, payload, "POST", session);
 
                 const items = Array.isArray(res?.items) ? res.items : [];
 
@@ -196,7 +196,7 @@ export function useVistasPublicasAdmin(session) {
                     ...(prefix ? { prefix } : {}),
                 };
 
-                const res = await createApiConn(UI_ENDPOINTS.FILES_LIST, payload, "GET", session);
+                const res = await createApiConn(UI_ENDPOINTS.FILES_LIST, payload, "POST", session);
                 const items = Array.isArray(res?.items) ? res.items : [];
 
                 const mapped = items
