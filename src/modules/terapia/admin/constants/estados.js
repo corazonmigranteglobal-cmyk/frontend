@@ -1,0 +1,5 @@
+export const ESTADOS = {
+    PENDIENTE: "PENDIENTE",
+    CONFIRMADO: "CONFIRMADA",
+    CANCELADO: "CANCELADA",
+};
