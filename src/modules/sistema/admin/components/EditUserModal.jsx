@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { USUARIOS_ENDPOINTS } from "../../../../config/USUARIOS_ENDPOINTS";
 import { createApiConn } from "../../../../helpers/api_conn_factory";
+import { useAdminOptions } from "../context/AdminOptionsContext";
 
 // Reuse the same lists as usersForm (fetched dynamically)
 export default function EditUserModal({ isOpen, onClose, user, session }) {
@@ -33,9 +34,33 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
         auditoria: false,
     });
 
-    // External lists
-    const [profesionesList, setProfesionesList] = useState([]);
-    const [especialidadesList, setEspecialidadesList] = useState([]);
+    const { profesiones: profesionesList, especialidades: especialidadesList, paises, getCiudades } = useAdminOptions();
+
+    const paisOptions = useMemo(() => {
+        const arr = Array.isArray(paises) ? paises : [];
+        // Si el usuario ya tiene un país que no está en el JSON, lo mantenemos visible
+        const merged = pais && !arr.includes(pais) ? [pais, ...arr] : arr;
+        return merged;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [paises, pais]);
+
+    const ciudadOptions = useMemo(() => {
+        const arr = Array.isArray(getCiudades?.(pais)) ? getCiudades(pais) : [];
+        const sorted = [...arr].sort((a, b) => String(a).localeCompare(String(b)));
+        // Mantener ciudad actual si no existe en el JSON
+        if (ciudad && !sorted.includes(ciudad)) return [ciudad, ...sorted];
+        return sorted;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pais, ciudad, getCiudades]);
+
+    useEffect(() => {
+        if (!pais) {
+            setCiudad("");
+            return;
+        }
+        if (ciudad && !ciudadOptions.includes(ciudad)) setCiudad("");
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pais]);
 
     // Determine user type from role
     const determineUserType = (role) => {
@@ -130,27 +155,6 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
 
         fetchUserData();
     }, [isOpen, user, session]);
-
-    // Load external lists for terapeuta dropdowns
-    useEffect(() => {
-        if (!isOpen) return;
-
-        const loadLists = async () => {
-            try {
-                const [profRes, espRes] = await Promise.all([
-                    fetch("https://storage.googleapis.com/vistas_publicas_assets/PROFESIONES_SALUD_MENTAL.json"),
-                    fetch("https://storage.googleapis.com/vistas_publicas_assets/ESPECIALIDADES_SALUD_MENTAL.json")
-                ]);
-                const profData = await profRes.json();
-                const espData = await espRes.json();
-                setProfesionesList(profData);
-                setEspecialidadesList(espData);
-            } catch (err) {
-                console.error("Error loading lists:", err);
-            }
-        };
-        loadLists();
-    }, [isOpen]);
 
     const handleSubmit = () => {
         // TODO: Implement update API call
@@ -412,23 +416,32 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
                                             <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
                                                 País
                                             </label>
-                                            <input
+                                            <select
                                                 value={pais}
                                                 onChange={(e) => setPais(e.target.value)}
-                                                type="text"
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                            />
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm outline-none focus:bg-white focus:border-primary appearance-none cursor-pointer"
+                                            >
+                                                <option value="">Seleccionar país</option>
+                                                {paisOptions.map((p) => (
+                                                    <option key={p} value={p}>{p}</option>
+                                                ))}
+                                            </select>
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
                                                 Ciudad
                                             </label>
-                                            <input
+                                            <select
                                                 value={ciudad}
                                                 onChange={(e) => setCiudad(e.target.value)}
-                                                type="text"
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                            />
+                                                disabled={!pais}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm outline-none focus:bg-white focus:border-primary appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                            >
+                                                <option value="">{pais ? "Seleccionar ciudad" : "Seleccionar país primero"}</option>
+                                                {ciudadOptions.map((c) => (
+                                                    <option key={c} value={c}>{c}</option>
+                                                ))}
+                                            </select>
                                         </div>
                                     </div>
                                 </div>

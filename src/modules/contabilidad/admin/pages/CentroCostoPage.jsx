@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useCentrosCostoAdmin } from "../hooks/useCentrosCostoAdmin";
 import ConfirmDeleteModal from "../components/modals/ConfirmDeleteModal";
 import MetadataKeyValueTable from "../components/MetadataKeyValueTable";
+import PaginationControls from "../components/PaginationControls";
 
 const EMPTY_FORM = {
   id_centro_costo: null,
@@ -12,7 +13,18 @@ const EMPTY_FORM = {
 };
 
 export default function CentroCostoPage({ session }) {
-  const { rows, isLoading, error, fetchCentros, crearCentro, editarCentro, apagarCentro } = useCentrosCostoAdmin(session);
+  const [pageSize, setPageSize] = useState(50);
+  const [offset, setOffset] = useState(0);
+
+  const { rows, isLoading, error, fetchCentros, crearCentro, editarCentro, apagarCentro } = useCentrosCostoAdmin(session, {
+    autoFetch: false,
+    limit: pageSize,
+  });
+
+  useEffect(() => {
+    if (!session?.id_sesion) return;
+    fetchCentros({ offset });
+  }, [session?.id_sesion, offset, pageSize, fetchCentros]);
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("todos"); // todos | activo | inactivo
@@ -89,7 +101,7 @@ export default function CentroCostoPage({ session }) {
         await crearCentro(payload);
       }
 
-      await fetchCentros();
+      await fetchCentros({ offset });
       startCreate();
     } catch (e) {
       console.error(e);
@@ -109,7 +121,7 @@ export default function CentroCostoPage({ session }) {
     setDeleting(true);
     try {
       await apagarCentro(deleteTarget);
-      await fetchCentros();
+      await fetchCentros({ offset });
       if (activeId === deleteTarget.id_centro_costo) startCreate();
       setDeleteOpen(false);
       setDeleteTarget(null);
@@ -172,7 +184,7 @@ export default function CentroCostoPage({ session }) {
               <button
                 type="button"
                 className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition text-xs font-semibold"
-                onClick={() => fetchCentros()}
+                onClick={() => fetchCentros({ offset })}
                 disabled={isLoading}
               >
                 Refrescar
@@ -296,16 +308,29 @@ export default function CentroCostoPage({ session }) {
               </table>
             </div>
 
-            <div className="p-3 border-t border-gray-100 bg-gray-50/50 flex justify-between items-center text-sm">
-              <span className="text-xs text-gray-500">{filteredRows.length} registros</span>
-              <div className="flex gap-1">
+            <div className="p-3 border-t border-gray-100 bg-gray-50/50 space-y-3">
+              <PaginationControls
+                offset={offset}
+                limit={pageSize}
+                count={rows.length}
+                isLoading={isLoading}
+                onPrev={() => setOffset((o) => Math.max(0, o - pageSize))}
+                onNext={() => setOffset((o) => o + pageSize)}
+                onLimitChange={(n) => {
+                  setPageSize(n);
+                  setOffset(0);
+                }}
+              />
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <span>{filteredRows.length} registros (filtrados)</span>
                 <button
                   type="button"
-                  className="p-1 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-50"
-                  onClick={() => fetchCentros()}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => fetchCentros({ offset })}
                   disabled={isLoading}
                 >
                   <span className="material-icons text-sm">refresh</span>
+                  Refrescar
                 </button>
               </div>
             </div>

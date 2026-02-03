@@ -1,14 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-
-/**
- * Rutas (las mismas que me pasaste)
- */
-const URL_ESPECIALIDADES =
-  "https://storage.googleapis.com/vistas_publicas_assets/admin_portal/options/ESPECIALIDADES_SALUD_MENTAL.json";
-const URL_PROFESIONES =
-  "https://storage.googleapis.com/vistas_publicas_assets/admin_portal/options/PROFESIONES_SALUD_MENTAL.json";
-const URL_PAISES_CIUDADES =
-  "https://storage.googleapis.com/vistas_publicas_assets/admin_portal/options/PAISES_CIUDADES.json";
+import { useAdminOptions } from "../../../sistema/admin/context/AdminOptionsContext";
 
 /**
  * Soporta 2 formatos comunes del JSON:
@@ -177,12 +168,14 @@ export default function TerapeutaPerfilForm({
 }) {
   const set = (k, v) => onChange?.(k, v);
 
-  // remote lists
-  const [profesionesList, setProfesionesList] = useState([]);
-  const [especialidadesList, setEspecialidadesList] = useState([]);
-  const [paisesCiudadesData, setPaisesCiudadesData] = useState({});
-
-  const [loadingLists, setLoadingLists] = useState(false);
+  // remote lists (cacheadas al iniciar sesión por AdminOptionsProvider)
+  const {
+    profesiones: profesionesList,
+    especialidades: especialidadesList,
+    paisesCiudades: paisesCiudadesData,
+    loading: loadingLists,
+    error: listsError,
+  } = useAdminOptions();
 
   // derived
   const paisesList = useMemo(
@@ -195,45 +188,7 @@ export default function TerapeutaPerfilForm({
     [paisesCiudadesData, profile?.pais]
   );
 
-  // Carga de listas externas (1 vez)
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      setLoadingLists(true);
-      try {
-        const [profRes, espRes, pcRes] = await Promise.all([
-          fetch(URL_PROFESIONES),
-          fetch(URL_ESPECIALIDADES),
-          fetch(URL_PAISES_CIUDADES),
-        ]);
-
-        const [profData, espData, pcData] = await Promise.all([
-          profRes.json(),
-          espRes.json(),
-          pcRes.json(),
-        ]);
-
-        if (!mounted) return;
-
-        setProfesionesList(Array.isArray(profData) ? profData : []);
-        setEspecialidadesList(Array.isArray(espData) ? espData : []);
-        setPaisesCiudadesData(pcData ?? {});
-      } catch (e) {
-        console.error("[TerapeutaPerfilForm] Error loading lists", e);
-        if (!mounted) return;
-        setProfesionesList([]);
-        setEspecialidadesList([]);
-        setPaisesCiudadesData({});
-      } finally {
-        if (mounted) setLoadingLists(false);
-      }
-    };
-
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  // Sin fetch aquí: viene listo desde el Provider
 
   // Si cambia el país, y la ciudad ya no es válida => reset
   useEffect(() => {

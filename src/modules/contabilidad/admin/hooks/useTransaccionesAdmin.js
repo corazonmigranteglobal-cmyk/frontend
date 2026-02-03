@@ -155,10 +155,19 @@ export function useTransaccionesAdmin(session, { autoFetch = true, limit = 200 }
             setIsLoading(true);
             setError("");
             try {
+                const page = Math.floor((Number(offset) || 0) / (Number(limit) || 1)) + 1;
                 const payload = {
                     ...getActorPayload(session),
+
+                    // Paginación (compatibilidad)
                     p_limit: limit,
                     p_offset: offset,
+                    limit,
+                    offset,
+                    page,
+                    page_size: limit,
+                    p_page: page,
+                    p_page_size: limit,
                     ...(fechaDesde ? { p_fecha_desde: fechaDesde } : {}),
                     ...(fechaHasta ? { p_fecha_hasta: fechaHasta } : {}),
                     ...(tipoTransaccion ? { p_tipo_transaccion: tipoTransaccion } : {}),

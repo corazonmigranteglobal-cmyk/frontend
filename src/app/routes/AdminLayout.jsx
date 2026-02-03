@@ -10,6 +10,7 @@ import ProductosDashboard from "../../modules/productos/admin/pages/ProductosDas
 import ContabilidadDashboard from "../../modules/contabilidad/admin/pages/ContabilidadDashboard.jsx";
 import MiPerfilDashboard from "../../modules/sistema/admin/pages/MiPerfilDashboard.jsx";
 import TerapeutaPerfilDashboard from "../../modules/terapia/admin/pages/TerapeutaPerfilDashboard.jsx";
+import { AdminOptionsProvider } from "../../modules/sistema/admin/context/AdminOptionsContext.jsx";
 
 function tabToPath(basePath) {
   const bp = String(basePath || "/admin").replace(/\/+$/, "");
@@ -75,7 +76,8 @@ export default function AdminLayout({ basePath = "/admin" }) {
   );
 
   return (
-    <Routes>
+    <AdminOptionsProvider enabled={!!session}>
+      <Routes>
       <Route path="" element={<Navigate to="solicitudes" replace />} />
 
       <Route
@@ -178,6 +180,7 @@ export default function AdminLayout({ basePath = "/admin" }) {
 
       {/* Unknown admin routes */}
       <Route path="*" element={<Navigate to="solicitudes" replace />} />
-    </Routes>
+      </Routes>
+    </AdminOptionsProvider>
   );
 }

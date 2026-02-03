@@ -121,11 +121,20 @@ export function useGruposCuentaAdmin(session, { autoFetch = true, limit = 200 } 
       setIsLoading(true);
       setError("");
       try {
-        const payload = {
-          ...getActorPayload(session),
-          p_limit: limit,
-          p_offset: offset,
-        };
+        const page = Math.floor((Number(offset) || 0) / (Number(limit) || 1)) + 1;
+                const payload = {
+                    ...getActorPayload(session),
+
+                    // Paginación (compatibilidad)
+                    p_limit: limit,
+                    p_offset: offset,
+                    limit,
+                    offset,
+                    page,
+                    page_size: limit,
+                    p_page: page,
+                    p_page_size: limit,
+                };
 
         const res = assertDbOk(await createApiConn(endpoint, payload, "POST", session));
         const list = Array.isArray(res?.rows) ? res.rows.map(mapGrupoRow) : [];

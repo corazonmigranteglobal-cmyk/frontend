@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useCuentasAdmin } from "../hooks/useCuentasAdmin";
 import { useTransaccionesAdmin } from "../hooks/useTransaccionesAdmin";
+import PaginationControls from "../components/PaginationControls";
 
 function money(n) {
     const v = Number(n) || 0;
@@ -34,6 +35,9 @@ function buildEmptyDraft() {
 }
 
 export default function TransaccionPage({ session }) {
+    const [pageSize, setPageSize] = useState(50);
+    const [offset, setOffset] = useState(0);
+
     const { rows: cuentas } = useCuentasAdmin(session, { autoFetch: true, limit: 200 });
     const cuentasById = useMemo(() => {
         const m = new Map();
@@ -48,7 +52,12 @@ export default function TransaccionPage({ session }) {
         fetchTransacciones,
         registrarBatch,
         applyOptimisticCreatedTransaccion,
-    } = useTransaccionesAdmin(session, { autoFetch: true, limit: 200 });
+    } = useTransaccionesAdmin(session, { autoFetch: false, limit: pageSize });
+
+    useEffect(() => {
+        if (!session?.id_sesion) return;
+        fetchTransacciones({ offset });
+    }, [session?.id_sesion, offset, pageSize, fetchTransacciones]);
 
     const [query, setQuery] = useState("");
     const [activeId, setActiveId] = useState(null);
@@ -225,6 +234,7 @@ export default function TransaccionPage({ session }) {
             applyOptimisticCreatedTransaccion(newTrans);
 
             // Refetch suave para alinear con backend (sin hard reload)
+            setOffset(0);
             fetchTransacciones({ offset: 0 });
             onNew();
         } catch (e) {
@@ -326,13 +336,29 @@ export default function TransaccionPage({ session }) {
                             </table>
                         </div>
 
-                        <div className="p-4 border-t border-slate-200 flex justify-center items-center bg-slate-50/50 rounded-b-xl">
-                            <button
-                                onClick={() => fetchTransacciones({ offset: 0 })}
-                                className="text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition-all font-medium"
-                            >
-                                Refrescar
-                            </button>
+                        <div className="p-4 border-t border-slate-200 bg-slate-50/50 rounded-b-xl space-y-3">
+                            <PaginationControls
+                                offset={offset}
+                                limit={pageSize}
+                                count={transacciones.length}
+                                isLoading={isLoading}
+                                onPrev={() => setOffset((o) => Math.max(0, o - pageSize))}
+                                onNext={() => setOffset((o) => o + pageSize)}
+                                onLimitChange={(n) => {
+                                    setPageSize(n);
+                                    setOffset(0);
+                                }}
+                            />
+                            <div className="flex items-center justify-between text-xs text-slate-500">
+                                <span>{flatLines.length} líneas (en esta página)</span>
+                                <button
+                                    onClick={() => fetchTransacciones({ offset })}
+                                    className="text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition-all font-medium disabled:opacity-50"
+                                    disabled={isLoading}
+                                >
+                                    Refrescar
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </section>

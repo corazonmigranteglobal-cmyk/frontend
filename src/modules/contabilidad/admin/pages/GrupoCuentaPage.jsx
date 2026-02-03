@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import ConfirmDeleteModal from "../components/modals/ConfirmDeleteModal";
 import MetadataKeyValueTable from "../components/MetadataKeyValueTable";
 import { useGruposCuentaAdmin } from "../hooks/useGruposCuentaAdmin";
+import PaginationControls from "../components/PaginationControls";
 
 const EMPTY_FORM = {
   id_grupo_cuenta: null,
@@ -14,6 +15,9 @@ const EMPTY_FORM = {
 };
 
 export default function GrupoCuentaPage({ session }) {
+  const [pageSize, setPageSize] = useState(50);
+  const [offset, setOffset] = useState(0);
+
   const {
     rows,
     isLoading,
@@ -22,7 +26,12 @@ export default function GrupoCuentaPage({ session }) {
     crearGrupoCuenta,
     editarGrupoCuenta,
     apagarGrupoCuenta,
-  } = useGruposCuentaAdmin(session);
+  } = useGruposCuentaAdmin(session, { autoFetch: false, limit: pageSize });
+
+  useEffect(() => {
+    if (!session?.id_sesion) return;
+    fetchGrupos({ offset });
+  }, [session?.id_sesion, offset, pageSize, fetchGrupos]);
 
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState(null);
@@ -108,6 +117,7 @@ export default function GrupoCuentaPage({ session }) {
         await crearGrupoCuenta(payload);
       }
 
+      setOffset(0);
       await fetchGrupos({ offset: 0 });
       startCreate();
     } catch (e) {
@@ -128,6 +138,7 @@ export default function GrupoCuentaPage({ session }) {
     setDeleting(true);
     try {
       await apagarGrupoCuenta(deleteTarget);
+      setOffset(0);
       await fetchGrupos({ offset: 0 });
       if (activeId === deleteTarget.id_grupo_cuenta) startCreate();
       setDeleteOpen(false);
@@ -192,7 +203,7 @@ export default function GrupoCuentaPage({ session }) {
               <button
                 type="button"
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-white disabled:opacity-50"
-                onClick={() => fetchGrupos({ offset: 0 })}
+                onClick={() => fetchGrupos({ offset })}
                 disabled={isLoading}
               >
                 {isLoading ? "Cargando..." : "Refrescar"}
@@ -283,6 +294,33 @@ export default function GrupoCuentaPage({ session }) {
                   ) : null}
                 </tbody>
               </table>
+            </div>
+
+            <div className="p-3 border-t border-gray-100 bg-gray-50/50 space-y-3">
+              <PaginationControls
+                offset={offset}
+                limit={pageSize}
+                count={rows.length}
+                isLoading={isLoading}
+                onPrev={() => setOffset((o) => Math.max(0, o - pageSize))}
+                onNext={() => setOffset((o) => o + pageSize)}
+                onLimitChange={(n) => {
+                  setPageSize(n);
+                  setOffset(0);
+                }}
+              />
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <span>{filteredRows.length} registros (filtrados)</span>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => fetchGrupos({ offset })}
+                  disabled={isLoading}
+                >
+                  <span className="material-icons text-sm">refresh</span>
+                  Refrescar
+                </button>
+              </div>
             </div>
           </div>
         </div>

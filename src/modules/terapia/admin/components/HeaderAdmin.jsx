@@ -126,7 +126,7 @@ export default function HeaderAdmin({
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
                                         setContaModule?.("cuenta");
-                                        onNavigate?.("contabilidad");
+                                        if (!setContaModule) onNavigate?.("contabilidad");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">account_tree</span>
@@ -144,7 +144,7 @@ export default function HeaderAdmin({
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
                                         setContaModule?.("grupo_cuenta");
-                                        onNavigate?.("contabilidad");
+                                        if (!setContaModule) onNavigate?.("contabilidad");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">folder</span>
@@ -162,7 +162,7 @@ export default function HeaderAdmin({
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
                                         setContaModule?.("centro_costo");
-                                        onNavigate?.("contabilidad");
+                                        if (!setContaModule) onNavigate?.("contabilidad");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">apartment</span>
@@ -180,7 +180,7 @@ export default function HeaderAdmin({
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
                                         setContaModule?.("transaccion");
-                                        onNavigate?.("contabilidad");
+                                        if (!setContaModule) onNavigate?.("contabilidad");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">receipt_long</span>

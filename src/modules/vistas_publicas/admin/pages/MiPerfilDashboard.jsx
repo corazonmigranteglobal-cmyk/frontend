@@ -90,6 +90,7 @@ export default function MiPerfilDashboard({
           onClose={() => setIsPwdModalOpen(false)}
           initialEmail={profile?.email || session?.email || ""}
           lockEmail={true}
+          secureMode
         />
       </main>
     </div>

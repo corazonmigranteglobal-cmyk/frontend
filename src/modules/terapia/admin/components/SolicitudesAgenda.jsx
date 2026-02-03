@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { chipByEstado, normalizeEstado } from "../utils/estado";
 
 function startOfMonth(d) {
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -229,7 +230,7 @@ export default function SolicitudesAgenda({ solicitudes = [], onSelect }) {
                                 </div>
 
                                 <div className="space-y-1">
-                                    {citas.slice(0, 2).map((s) => (
+                                    {citas.slice(0, 3).map((s) => (
                                         (() => {
                                             const displayName = resolveDisplayName(s);
                                             const displayHora = resolveDisplayTime(s);
@@ -237,29 +238,44 @@ export default function SolicitudesAgenda({ solicitudes = [], onSelect }) {
                                                 ? safeStr(displayHora).split("-")[0].trim()
                                                 : safeStr(displayHora);
 
+                                            const estadoNorm = normalizeEstado(s?.estado);
+                                            const chipCls = chipByEstado(estadoNorm);
+                                            const dotCls =
+                                                estadoNorm === "CONFIRMADO"
+                                                    ? "bg-emerald-200"
+                                                    : estadoNorm === "PENDIENTE"
+                                                        ? "bg-amber-200"
+                                                        : estadoNorm === "REPROGRAMADO"
+                                                            ? "bg-sky-200"
+                                                            : (estadoNorm === "CANCELADO" || estadoNorm === "RECHAZADO")
+                                                                ? "bg-rose-300"
+                                                                : "bg-slate-300";
+
                                             return (
-                                        <button
-                                            key={s.id}
-                                            className={
-                                                s.estado === "CONFIRMADA"
-                                                    ? "w-full text-left p-2 rounded-lg bg-primary text-white shadow-sm hover:bg-black transition-all"
-                                                    : s.estado === "PENDIENTE"
-                                                        ? "w-full text-left p-2 rounded-lg bg-brand-gold text-white shadow-sm hover:opacity-90 transition-all"
-                                                        : "w-full text-left p-2 rounded-lg bg-slate-100 text-slate-600 border border-slate-200"
-                                            }
-                                            onClick={() => onSelect?.(s.id)}
-                                            title={`${displayName} (${displayHora})`}
-                                        >
-                                            <p className="text-[9px] font-bold opacity-80 leading-none">{displayHoraLeft}</p>
-                                            <p className="text-[11px] font-bold truncate">{displayName}</p>
-                                        </button>
+                                                <button
+                                                    key={s.id}
+                                                    className={
+                                                        `w-full text-left rounded-xl px-3 py-2 shadow-sm transition-all ${chipCls} ` +
+                                                        "focus:outline-none focus:ring-2 focus:ring-primary/20 active:scale-[0.99]"
+                                                    }
+                                                    onClick={() => onSelect?.(s.id)}
+                                                    title={`${displayName} (${displayHora})`}
+                                                >
+                                                    <div className="flex items-start gap-2">
+                                                        <span className={`mt-1.5 h-2 w-2 rounded-full ${dotCls}`} aria-hidden />
+                                                        <div className="min-w-0">
+                                                            <p className="text-[10px] font-extrabold leading-none opacity-90">{displayHoraLeft}</p>
+                                                            <p className="text-[12px] font-extrabold truncate leading-tight">{displayName}</p>
+                                                        </div>
+                                                    </div>
+                                                </button>
                                             );
                                         })()
                                     ))}
 
-                                    {citas.length > 2 && (
+                                    {citas.length > 3 && (
                                         <div className="text-[10px] font-bold text-slate-400">
-                                            +{citas.length - 2} más
+                                            +{citas.length - 3} más
                                         </div>
                                     )}
                                 </div>
