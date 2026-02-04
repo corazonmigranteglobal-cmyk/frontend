@@ -2,7 +2,8 @@ export const TERAPIA_ENDPOINTS = {
     CITAS_SOLICITUDES_LISTAR: "/api/terapia/admin/citas/solicitudes/listar",
     CITAS_ESTADO_ACTUALIZAR: "/api/terapia/citas/estados/actualizar",
     CITAS_REPROGRAMAR: "/api/terapia/citas/detalle/actualizar",
-    CITAS_ESTADO_ACTUALIZAR: "/api/terapia/citas/estados/actualizar",
+    CITAS_REGISTRAR: "/api/terapia/citas/registrar",
+    CITAS_APAGAR: "/api/terapia/citas/apagar",
 
     ENFOQUES_CREAR: "/api/terapia/enfoques/crear",
     ENFOQUES_MODIFICAR: "/api/terapia/enfoques/modificar",
@@ -15,6 +16,7 @@ export const TERAPIA_ENDPOINTS = {
     PRODUCTOS_APAGAR: "/api/terapia/productos/apagar",
 
     BOOSTROP_ENFOQUE_PRODUCTO: "/api/terapia/bootstrap/enfoque-producto",
+    BOOKING_BOOTSTRAP: "/api/terapia/booking/bootstrap",
     ENFOQUES_CREAR_CON_ARCHIVO: "/api/terapia/enfoques/crear-con-archivo",
     ENFOQUES_MODIFICAR_CON_ARCHIVO: "/api/terapia/enfoques/modificar-con-archivo",
     HORARIOS_CREAR: "/api/terapia/horarios/crear",
