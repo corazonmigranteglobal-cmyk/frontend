@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useScrollThreshold } from "../../hooks/useScrollProgress";
 
-export default function LandingNavbar({ data, onAction }) {
+export default function LandingNavbar({ data, uiById, onAction }) {
   const [open, setOpen] = useState(false);
 
   const brand = data?.brand;
@@ -11,7 +11,10 @@ export default function LandingNavbar({ data, onAction }) {
 
   const brandLabel = brand?.label || "";
   const brandHref = brand?.href || "#inicio";
-  const brandIcon = brand?.icon || "";
+  const brandIcon = brand?.icon;
+  const brandIconId = typeof brandIcon === "number" ? brandIcon : Number(brandIcon);
+  const brandIconUrl = Number.isFinite(brandIconId) ? (uiById?.[brandIconId]?.link || uiById?.[brandIconId]?.metadata?.url || "") : "";
+  const brandIconText = typeof brandIcon === "string" ? brandIcon : "";
 
   const mobile = data?.mobile || {};
   const mobileMenuLabel = mobile?.menu_label || "";
@@ -32,13 +35,19 @@ export default function LandingNavbar({ data, onAction }) {
         }`} />
       <div className="relative max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <a href={brandHref} className="flex items-center gap-2 font-display font-bold text-xl text-primary dark:text-white">
-          {brandIcon ?
+          {brandIconUrl ? (
             <span className="flex items-center gap-2">
-              <img src={brandIcon} alt="Logo" className="h-8 w-auto" />
+              <img src={brandIconUrl} alt={brandLabel || "Logo"} className="h-8 w-auto" />
               {brandLabel}
-            </span> :
-            <span className="material-symbols-outlined text-[20px]">{brandIcon}</span>
-          }
+            </span>
+          ) : brandIconText ? (
+            <span className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px]">{brandIconText}</span>
+              {brandLabel}
+            </span>
+          ) : (
+            <span>{brandLabel}</span>
+          )}
         </a>
 
         {/* Desktop */}

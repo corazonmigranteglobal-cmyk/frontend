@@ -1,12 +1,23 @@
 import React from "react";
 import { useScrollReveal } from "../../../hooks/useScrollReveal";
 
-function EmotionCard({ delayClass = "", item, index }) {
+function EmotionCard({ delayClass = "", item, index, uiById }) {
   const title = item?.title || "";
   const body = item?.body || "";
+  const imgIdUi = item?.image?.id_ui;
   const imgSrc = item?.image?.src || "";
   const imgAlt = item?.image?.alt || "";
   const imgFallback = item?.image?.fallback_src || "";
+
+  const resolvedSrc = (() => {
+    const idNum = Number(imgIdUi);
+    if (Number.isFinite(idNum)) {
+      return uiById?.[idNum]?.link || uiById?.[idNum]?.metadata?.url || "";
+    }
+    return "";
+  })() || imgSrc;
+
+  const resolvedAlt = imgAlt || (Number.isFinite(Number(imgIdUi)) ? (uiById?.[Number(imgIdUi)]?.metadata?.alt || "") : "");
 
   const revealRef = useScrollReveal({ threshold: 0.2 });
 
@@ -18,11 +29,11 @@ function EmotionCard({ delayClass = "", item, index }) {
     >
       <div className="w-full aspect-square mb-8 relative overflow-hidden bg-surface-light dark:bg-surface-dark shadow-soft rounded p-4 card-3d perspective-container">
         <div className="w-full h-full relative overflow-hidden rounded transform transition-transform duration-700 group-hover:scale-110 group-hover:rotate-2">
-          {imgSrc ? (
+          {resolvedSrc ? (
             <img
-              alt={imgAlt}
+              alt={resolvedAlt}
               className="w-full h-full object-cover"
-              src={imgSrc}
+              src={resolvedSrc}
               loading="lazy"
               decoding="async"
               onError={(e) => {
@@ -47,7 +58,7 @@ function EmotionCard({ delayClass = "", item, index }) {
   );
 }
 
-export default function EmotionsSection({ data }) {
+export default function EmotionsSection({ data, uiById }) {
   if (!data) return null;
 
   const id = data?.id || "";
@@ -80,6 +91,7 @@ export default function EmotionsSection({ data }) {
               delayClass={["delay-100", "delay-200", "delay-300", "delay-400"][idx] || ""}
               item={it}
               index={idx}
+              uiById={uiById}
             />
           ))}
         </div>

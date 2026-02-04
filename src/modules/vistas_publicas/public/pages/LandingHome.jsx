@@ -30,7 +30,7 @@ function smoothScrollToHash(href) {
 export default function LandingHome() {
   const [view, setView] = useState("landing"); // landing | login | signup
 
-  const { content, loading, error } = useLandingContent();
+  const { content, uiById, loading, error } = useLandingContent();
 
   const runAction = useCallback((action, href) => {
     switch (action) {
@@ -148,13 +148,13 @@ if (loading && !content) {
   return (
     <div id="inicio" className="bg-background-light dark:bg-background-dark transition-colors duration-300 antialiased">
       <ScrollProgress />
-      <LandingNavbar data={navbar} onAction={runAction} />
+      <LandingNavbar data={navbar} uiById={uiById} onAction={runAction} />
 
       <HeroSection data={hero} onAction={runAction} />
 
-      <MapSection data={sections.map} onAction={runAction} />
-      <MissionSection data={sections.mission} onAction={runAction} />
-      <EmotionsSection data={sections.emotions} />
+      <MapSection data={sections.map} uiById={uiById} onAction={runAction} />
+      <MissionSection data={sections.mission} uiById={uiById} onAction={runAction} />
+      <EmotionsSection data={sections.emotions} uiById={uiById} />
       <PsychologistsSection data={sections.psicologists} />
       <CTASection data={sections.cta} onAction={runAction} telefono={telefono} />
 
