@@ -33,10 +33,6 @@ export function useCitaActions({ session, selected, setSolicitudes }) {
     const [realizarLoading, setRealizarLoading] = useState(false);
     const [realizarError, setRealizarError] = useState("");
 
-    // realizar
-    const [realizarLoading, setRealizarLoading] = useState(false);
-    const [realizarError, setRealizarError] = useState("");
-
     // success modal
     const [successOpen, setSuccessOpen] = useState(false);
     const [successMsg, setSuccessMsg] = useState("");
