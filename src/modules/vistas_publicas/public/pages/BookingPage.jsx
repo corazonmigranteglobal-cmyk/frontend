@@ -43,12 +43,12 @@ export default function BookingPage() {
         getBookingBootstrap(true).catch(console.error);
     }, []);
 
-    // Load availability when terapeuta changes
+    // Load availability when terapeuta changes or when entering step 3
     useEffect(() => {
-        if (formData.terapeuta?.id_usuario) {
+        if (formData.terapeuta?.id_usuario && step === 3) {
             getDisponibilidad(formData.terapeuta.id_usuario).catch(console.error);
         }
-    }, [formData.terapeuta]);
+    }, [formData.terapeuta, step]);
 
     const updateForm = useCallback((field, value) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
@@ -82,10 +82,11 @@ export default function BookingPage() {
         }
     };
 
-    // Group disponibilidad by date
+    // Group disponibilidad by date (all returned horarios are available)
     const groupedHorarios = disponibilidad.reduce((acc, h) => {
+        if (!h.fecha) return acc;
         if (!acc[h.fecha]) acc[h.fecha] = [];
-        if (h.disponible) acc[h.fecha].push(h);
+        acc[h.fecha].push(h);
         return acc;
     }, {});
 
@@ -144,8 +145,8 @@ export default function BookingPage() {
                         <div key={s} className="flex items-center flex-1">
                             <div
                                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step >= s
-                                        ? "bg-primary text-white"
-                                        : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                                    ? "bg-primary text-white"
+                                    : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
                                     }`}
                             >
                                 {step > s ? (
@@ -200,14 +201,14 @@ export default function BookingPage() {
                                 key={prod.id_producto}
                                 onClick={() => updateForm("producto", prod)}
                                 className={`text-left p-5 rounded-2xl border transition-all ${formData.producto?.id_producto === prod.id_producto
-                                        ? "border-primary bg-primary/5 shadow-md"
-                                        : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
+                                    ? "border-primary bg-primary/5 shadow-md"
+                                    : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
                                     }`}
                             >
                                 <div className="flex items-start gap-4">
                                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${formData.producto?.id_producto === prod.id_producto
-                                            ? "bg-primary/20"
-                                            : "bg-slate-100 dark:bg-slate-800"
+                                        ? "bg-primary/20"
+                                        : "bg-slate-100 dark:bg-slate-800"
                                         }`}>
                                         <span className="material-symbols-outlined text-primary">spa</span>
                                     </div>
@@ -241,8 +242,8 @@ export default function BookingPage() {
                                 key={ter.id_usuario}
                                 onClick={() => updateForm("terapeuta", ter)}
                                 className={`text-left p-5 rounded-2xl border transition-all ${formData.terapeuta?.id_usuario === ter.id_usuario
-                                        ? "border-primary bg-primary/5 shadow-md"
-                                        : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
+                                    ? "border-primary bg-primary/5 shadow-md"
+                                    : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
                                     }`}
                             >
                                 <div className="flex items-start gap-4">
@@ -299,8 +300,8 @@ export default function BookingPage() {
                                                     updateForm("horaFin", h.hora_fin);
                                                 }}
                                                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${formData.fecha === h.fecha && formData.horaInicio === h.hora_inicio
-                                                        ? "bg-primary text-white shadow-md"
-                                                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-primary/10"
+                                                    ? "bg-primary text-white shadow-md"
+                                                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-primary/10"
                                                     }`}
                                             >
                                                 {h.hora_inicio} - {h.hora_fin}
@@ -410,8 +411,8 @@ export default function BookingPage() {
                             onClick={prevStep}
                             disabled={step === 1}
                             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${step === 1
-                                    ? "opacity-50 cursor-not-allowed text-slate-400"
-                                    : "text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10"
+                                ? "opacity-50 cursor-not-allowed text-slate-400"
+                                : "text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10"
                                 }`}
                         >
                             <span className="material-symbols-outlined">arrow_back</span>
