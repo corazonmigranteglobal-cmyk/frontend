@@ -9,6 +9,7 @@ import RejectModal from "../components/modals/RejectModal";
 import ConfirmModal from "../components/modals/ConfirmModal";
 import ReprogramarModal from "../components/modals/ReprogramarModal";
 import SuccessModal from "../components/modals/SuccessModal";
+import RealizarModal from "../components/modals/RealizarModal";
 
 import { useSolicitudes } from "../hooks/useSolicitudes";
 import { useCitaActions } from "../hooks/useCitaActions";
@@ -128,6 +129,10 @@ export default function RequestDashboard({ session, onLogout, activeTab, onNavig
                             actions.setSuccessOpen(false);
                             actions.setConfirmOpen(true);
                         }}
+                        onOpenRealizar={() => {
+                            actions.setSuccessOpen(false);
+                            actions.setRealizarOpen(true);
+                        }}
                     />
                 </div>
 
@@ -156,6 +161,15 @@ export default function RequestDashboard({ session, onLogout, activeTab, onNavig
                 error={actions.confirmError}
                 loading={actions.confirmLoading}
                 onSubmit={actions.handleConfirmSubmit}
+            />
+
+            <RealizarModal
+                open={actions.realizarOpen}
+                onClose={() => actions.setRealizarOpen(false)}
+                selected={selected}
+                error={actions.realizarError}
+                loading={actions.realizarLoading}
+                onSubmit={actions.handleRealizarSubmit}
             />
 
             <ReprogramarModal

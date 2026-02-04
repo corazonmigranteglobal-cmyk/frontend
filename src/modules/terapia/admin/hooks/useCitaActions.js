@@ -9,6 +9,7 @@ export function useCitaActions({ session, selected, setSolicitudes }) {
     const [reprogOpen, setReprogOpen] = useState(false);
     const [rejectOpen, setRejectOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
+    const [realizarOpen, setRealizarOpen] = useState(false);
 
     // notes
     const [notes, setNotes] = useState("");
@@ -27,6 +28,14 @@ export function useCitaActions({ session, selected, setSolicitudes }) {
     // confirm
     const [confirmLoading, setConfirmLoading] = useState(false);
     const [confirmError, setConfirmError] = useState("");
+
+    // realizar
+    const [realizarLoading, setRealizarLoading] = useState(false);
+    const [realizarError, setRealizarError] = useState("");
+
+    // realizar
+    const [realizarLoading, setRealizarLoading] = useState(false);
+    const [realizarError, setRealizarError] = useState("");
 
     // success modal
     const [successOpen, setSuccessOpen] = useState(false);
@@ -200,6 +209,53 @@ export function useCitaActions({ session, selected, setSolicitudes }) {
         }
     }
 
+    async function handleRealizarSubmit() {
+        if (!selected?.id) return;
+
+        setRealizarLoading(true);
+        setRealizarError("");
+
+        try {
+            const motivo = (notes || "").trim();
+
+            const payload = {
+                p_actor_user_id: session?.user_id,
+                p_id_sesion: session?.id_sesion,
+                p_id_cita: Number(selected.id),
+                p_nuevo_estado: ESTADOS.REALIZADO,
+                p_motivo: motivo
+                    ? `${motivo} (Marcado como realizado desde portal administrativo)`
+                    : "Marcado como realizado desde portal administrativo",
+            };
+
+            const resp = await actualizarEstadoCita(payload);
+            const row = resp?.rows?.[0];
+
+            if (resp?.ok !== true) throw new Error(resp?.message || "No se pudo marcar como realizado");
+            if (row?.status && row.status !== "ok") throw new Error(row?.message || "No se pudo marcar como realizado");
+
+            setSolicitudes((prev) =>
+                prev.map((s) => {
+                    if (s.id !== selected.id) return s;
+                    return {
+                        ...s,
+                        estado: ESTADOS.REALIZADO,
+                        estadoBadgeClass: badgeByEstado(ESTADOS.REALIZADO),
+                        raw: { ...(s.raw || {}), estado: ESTADOS.REALIZADO },
+                    };
+                })
+            );
+
+            setRealizarOpen(false);
+            setSuccessMsg(row?.message || "Cita marcada como realizada");
+            setSuccessOpen(true);
+        } catch (e) {
+            setRealizarError(e?.message || "Error marcando como realizado");
+        } finally {
+            setRealizarLoading(false);
+        }
+    }
+
     return {
         // notes
         notes,
@@ -209,6 +265,7 @@ export function useCitaActions({ session, selected, setSolicitudes }) {
         reprogOpen, setReprogOpen,
         rejectOpen, setRejectOpen,
         confirmOpen, setConfirmOpen,
+        realizarOpen, setRealizarOpen,
 
         // reprogram state
         reprogDate, setReprogDate,
@@ -225,6 +282,10 @@ export function useCitaActions({ session, selected, setSolicitudes }) {
         // confirm state
         confirmLoading, confirmError,
         handleConfirmSubmit,
+
+        // realizar state
+        realizarLoading, realizarError,
+        handleRealizarSubmit,
 
         // success modal
         successOpen, setSuccessOpen,

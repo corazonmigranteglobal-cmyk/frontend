@@ -10,19 +10,27 @@ export default function SolicitudDetail({
     onOpenReject,
     onOpenReprog,
     onOpenConfirm,
+    onOpenRealizar,
     className = "col-span-12 lg:col-span-8",
 }) {
-    const estadoUpper = normalizeEstado(selected?.estado);
+    const estadoNorm = normalizeEstado(selected?.estado);
 
-    const disableConfirm = estadoUpper === "CANCELADO" || estadoUpper === "CONFIRMADO";
-    const disableAll = estadoUpper === "CANCELADO";
+    const isCancelado = estadoNorm === "CANCELADO";
+    const isConfirmado = estadoNorm === "CONFIRMADO";
+    const isRealizado = estadoNorm === "REALIZADO";
+
+    const disableConfirm = isCancelado || isConfirmado || isRealizado;
+    const disableAll = isCancelado;
+
+    // Solo tiene sentido "Realizar" si está confirmado y aún no está realizado/cancelado
+    const disableRealizar = !isConfirmado || isCancelado || isRealizado;
 
     const disableReject = disableAll;
     const disableReprogram = disableAll;
 
     return (
         <section className={`${className} bg-white rounded-2xl shadow-2xl shadow-slate-200 border border-slate-200 overflow-hidden flex flex-col`}>
-            <div className="px-8 py-8 border-b border-slate-100 flex items-center justify-between bg-white">
+            <div className="px-5 py-5 sm:px-8 sm:py-8 border-b border-slate-100 flex items-start sm:items-center justify-between bg-white gap-4">
                 <div className="flex items-center gap-6">
                     {selected?.avatar ? (
                         <img
@@ -36,9 +44,9 @@ export default function SolicitudDetail({
                         </div>
                     )}
 
-                    <div>
-                        <div className="flex items-center gap-3 mb-1">
-                            <h2 className="text-3xl font-display font-bold text-slate-900">{selected?.nombre}</h2>
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-3 mb-1">
+                            <h2 className="text-2xl sm:text-3xl font-display font-bold text-slate-900 truncate max-w-[18rem] sm:max-w-none">{selected?.nombre}</h2>
                             <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest ${selected?.estadoBadgeClass || "bg-slate-100 text-slate-500"}`}>
                                 {selected?.estado || ""}
                             </span>
@@ -58,9 +66,6 @@ export default function SolicitudDetail({
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 transition-all rounded-xl border border-slate-100" title="Imprimir">
-                        <span className="material-symbols-outlined">print</span>
-                    </button>
                     <button className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 transition-all rounded-xl border border-slate-100" title="Más">
                         <span className="material-symbols-outlined">more_vert</span>
                     </button>
@@ -68,7 +73,7 @@ export default function SolicitudDetail({
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6 sm:p-8 lg:p-10">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-10">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-10">
                     <div className="space-y-8">
                         <div>
                             <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-5">
@@ -82,7 +87,7 @@ export default function SolicitudDetail({
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Correo</p>
-                                        <p className="text-slate-900 font-semibold break-all">{selected?.correo}</p>
+                                        <p className="text-slate-900 font-semibold break-all sm:break-words leading-snug">{selected?.correo}</p>
                                     </div>
                                 </div>
 
@@ -138,7 +143,7 @@ export default function SolicitudDetail({
                             </h3>
 
                             <textarea
-                                className="w-full bg-slate-50 border-slate-200 rounded-2xl text-sm p-5 focus:ring-primary focus:border-primary transition-all min-h-[140px] lg:min-h-[160px] placeholder:italic shadow-inner resize-y"
+                                className="w-full bg-slate-50 border-slate-200 rounded-2xl text-sm p-5 focus:ring-primary focus:border-primary transition-all min-h-[160px] placeholder:italic shadow-inner resize-none"
                                 placeholder="Describa el motivo de la reprogramación / cancelación"
                                 value={notes}
                                 onChange={(e) => setNotes(e.target.value)}
@@ -202,7 +207,7 @@ export default function SolicitudDetail({
             </div>
 
             {/* Actions */}
-            <div className="px-8 py-6 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
+            <div className="px-5 py-5 sm:px-8 sm:py-6 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
                 <button
                     type="button"
                     disabled={disableReject}
@@ -220,7 +225,7 @@ export default function SolicitudDetail({
                     Rechazar
                 </button>
 
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-3 sm:gap-4 justify-end">
                     <button
                         type="button"
                         disabled={disableReprogram}
@@ -253,6 +258,23 @@ export default function SolicitudDetail({
                     >
                         <span className="material-symbols-outlined text-[20px]">verified</span>
                         Confirmar Cita
+                    </button>
+
+                    <button
+                        type="button"
+                        disabled={disableRealizar}
+                        onClick={() => {
+                            if (disableRealizar) return;
+                            onOpenRealizar?.();
+                        }}
+                        className={`px-10 py-4 rounded-xl font-bold text-xs uppercase tracking-[0.2em] flex items-center gap-2 transition-all shadow-xl
+                            ${disableRealizar
+                                ? "opacity-50 cursor-not-allowed bg-slate-300 text-white shadow-none"
+                                : "bg-sky-700 text-white hover:bg-sky-900 shadow-sky-700/20"
+                            }`}
+                    >
+                        <span className="material-symbols-outlined text-[20px]">done_all</span>
+                        Realizar
                     </button>
                 </div>
             </div>
