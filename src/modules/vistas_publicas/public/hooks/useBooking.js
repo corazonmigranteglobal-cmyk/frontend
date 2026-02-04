@@ -25,15 +25,50 @@ export function useBooking() {
         };
     }, [session]);
 
+    // -------------------------
+    // Helpers de fecha/hora
+    // -------------------------
+    const pad2 = useCallback((n) => String(n).padStart(2, "0"), []);
+
     /**
-     * Construye un Date en HORA LOCAL a partir de fecha YYYY-MM-DD y hora HH:MM
-     * Evita problemas de parseo / UTC (el famoso "Z") al convertir con toISOString().
+     * Construye un Date en HORA LOCAL a partir de:
+     * - fechaStr: "YYYY-MM-DD"
+     * - horaStr:  "HH:MM"
      */
     const buildLocalDate = useCallback((fechaStr, horaStr) => {
         const [y, m, d] = String(fechaStr).split("-").map((x) => parseInt(x, 10));
         const [hh, mm] = String(horaStr).split(":").map((x) => parseInt(x, 10));
         return new Date(y, m - 1, d, hh, mm, 0, 0); // local time
     }, []);
+
+    /**
+     * Formatea un Date a string timestamptz con offset local:
+     * "YYYY-MM-DDTHH:mm:ss±HH:MM"
+     *
+     * Esto evita enviar "Z" (UTC) con toISOString(), que suele romper validaciones
+     * si el backend trabaja en hora local para disponibilidad.
+     */
+    const formatLocalTimestamptz = useCallback(
+        (d) => {
+            const y = d.getFullYear();
+            const m = pad2(d.getMonth() + 1);
+            const day = pad2(d.getDate());
+            const hh = pad2(d.getHours());
+            const mm = pad2(d.getMinutes());
+            const ss = pad2(d.getSeconds());
+
+            // getTimezoneOffset(): minutos que se SUMAN a local para llegar a UTC
+            // Bolivia suele ser 240 => offset "-04:00"
+            const offMin = d.getTimezoneOffset();
+            const sign = offMin <= 0 ? "+" : "-";
+            const abs = Math.abs(offMin);
+            const offHH = pad2(Math.floor(abs / 60));
+            const offMM = pad2(abs % 60);
+
+            return `${y}-${m}-${day}T${hh}:${mm}:${ss}${sign}${offHH}:${offMM}`;
+        },
+        [pad2]
+    );
 
     /**
      * Obtiene datos iniciales para booking: enfoques, productos, terapeutas, horarios
@@ -106,13 +141,13 @@ export function useBooking() {
                     session
                 );
 
-                // API returns rows directly, not nested
-                // Each row has: fecha, inicio, fin (ISO strings)
+                // API returns rows directly
+                // Each row: fecha, inicio, fin (ISO strings)
                 const horarios = (res?.rows || []).map((h) => ({
                     ...h,
-                    // Normalize fecha to date string (YYYY-MM-DD)
+                    // Normalize fecha to YYYY-MM-DD
                     fecha: h.fecha ? h.fecha.split("T")[0] : null,
-                    // Extract time from ISO datetime (shown in local time)
+                    // Mostrar hora en local
                     hora_inicio: h.inicio
                         ? new Date(h.inicio).toLocaleTimeString("es-ES", {
                             hour: "2-digit",
@@ -127,7 +162,7 @@ export function useBooking() {
                             hour12: false,
                         })
                         : null,
-                    disponible: true, // All returned slots are available
+                    disponible: true,
                 }));
 
                 setDisponibilidad(horarios);
@@ -165,8 +200,7 @@ export function useBooking() {
             try {
                 const authParams = getAuthParams();
 
-                // Construir fechas EN HORA LOCAL (Bolivia) y convertir a ISO UTC.
-                // Esto evita que se mande "13:00Z" cuando el usuario eligió 13:00 local.
+                // Construir fechas en hora local y enviar con offset local (ej -04:00)
                 const inicioDate = buildLocalDate(fecha, horaInicio);
                 const finDate = buildLocalDate(fecha, horaFin);
 
@@ -177,8 +211,9 @@ export function useBooking() {
                         p_id_usuario_paciente: authParams.p_actor_user_id,
                         p_id_producto: idProducto,
                         p_fecha: fecha,
-                        p_inicio: inicioDate.toISOString(),
-                        p_fin: finDate.toISOString(),
+                        // clave: NO enviar Z/UTC. Enviar timestamptz con offset local.
+                        p_inicio: formatLocalTimestamptz(inicioDate),
+                        p_fin: formatLocalTimestamptz(finDate),
                         p_notas: notas,
                     },
                 };
@@ -204,7 +239,7 @@ export function useBooking() {
                 setLoading(false);
             }
         },
-        [getAuthParams, session, buildLocalDate]
+        [getAuthParams, session, buildLocalDate, formatLocalTimestamptz]
     );
 
     /**
