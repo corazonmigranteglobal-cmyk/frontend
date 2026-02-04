@@ -138,15 +138,31 @@ export function usePacienteAuth({ initialMode } = {}) {
           // Store session via SessionContext
           sessionLogin(sessionPayload, { remember: loginForm.remember });
 
+          // Determine redirect based on role
+          const userRole = (data.role || "").toUpperCase();
+          let redirectPath = "/";
+
+          if (userRole === "PACIENTE") {
+            redirectPath = "/paciente/dashboard";
+          } else if (userRole === "TERAPEUTA") {
+            redirectPath = "/terapeuta/dashboard";
+          } else if (userRole === "ADMIN" || data.is_admin || data.is_super_admin) {
+            redirectPath = "/admin/dashboard";
+          }
+
           setResult({
             kind: "success",
             title: "¡Bienvenido!",
-            message: "Has iniciado sesión correctamente.",
+            message: userRole === "TERAPEUTA"
+              ? "Has iniciado sesión como terapeuta."
+              : userRole === "ADMIN"
+                ? "Has iniciado sesión como administrador."
+                : "Has iniciado sesión correctamente.",
           });
 
-          // Redirect to dashboard after a short delay
+          // Redirect to appropriate dashboard after a short delay
           setTimeout(() => {
-            navigate("/paciente/dashboard");
+            navigate(redirectPath);
           }, 1500);
 
         } catch (err) {

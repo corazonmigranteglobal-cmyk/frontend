@@ -4,6 +4,7 @@ import LandingHome from "../../modules/vistas_publicas/public/pages/LandingHome.
 import PublicLoginPage from "../../modules/vistas_publicas/public/auth/PublicLoginPage.jsx";
 import PublicSignupPage from "../../modules/vistas_publicas/public/auth/PublicSignupPage.jsx";
 import PacienteDashboard from "../../modules/vistas_publicas/public/pages/PacienteDashboard.jsx";
+import TerapeutaDashboard from "../../modules/vistas_publicas/public/pages/TerapeutaDashboard.jsx";
 import BookingPage from "../../modules/vistas_publicas/public/pages/BookingPage.jsx";
 import AdminLoginRoute from "./AdminLoginRoute.jsx";
 import AdminLayout from "./AdminLayout.jsx";
@@ -15,18 +16,27 @@ export default function AppRouter() {
       {/* Public */}
       <Route path="/" element={<LandingHome />} />
 
-      {/* Public (Paciente) */}
+      {/* Public auth (Paciente y Terapeuta) */}
       <Route path="/paciente/login" element={<PublicLoginPage />} />
       <Route path="/paciente/signup" element={<PublicSignupPage />} />
+      {/* Terapeuta también puede usar el mismo login */}
+      <Route path="/terapeuta/login" element={<PublicLoginPage />} />
+
       {/* Aliases for landing CTAs */}
       <Route path="/login" element={<Navigate to="/paciente/login" replace />} />
       <Route path="/signup" element={<Navigate to="/paciente/signup" replace />} />
 
-      {/* Paciente protected routes */}
+      {/* ============================================ */}
+      {/* PACIENTE protected routes                   */}
+      {/* ============================================ */}
       <Route
         path="/paciente/dashboard"
         element={
-          <RequireSession loginPath="/paciente/login">
+          <RequireSession
+            loginPath="/paciente/login"
+            allowedRoles={["PACIENTE"]}
+            redirectIfWrongRole="/terapeuta/dashboard"
+          >
             <PacienteDashboard />
           </RequireSession>
         }
@@ -34,13 +44,35 @@ export default function AppRouter() {
       <Route
         path="/paciente/booking"
         element={
-          <RequireSession loginPath="/paciente/login">
+          <RequireSession
+            loginPath="/paciente/login"
+            allowedRoles={["PACIENTE"]}
+            redirectIfWrongRole="/terapeuta/dashboard"
+          >
             <BookingPage />
           </RequireSession>
         }
       />
 
-      {/* Admin auth */}
+      {/* ============================================ */}
+      {/* TERAPEUTA protected routes                  */}
+      {/* ============================================ */}
+      <Route
+        path="/terapeuta/dashboard"
+        element={
+          <RequireSession
+            loginPath="/paciente/login"
+            allowedRoles={["TERAPEUTA"]}
+            redirectIfWrongRole="/paciente/dashboard"
+          >
+            <TerapeutaDashboard />
+          </RequireSession>
+        }
+      />
+
+      {/* ============================================ */}
+      {/* ADMIN auth                                  */}
+      {/* ============================================ */}
       <Route path="/admin/login" element={<AdminLoginRoute basePath="/admin" />} />
 
       {/* Admin portal auth (special route from src/modules/auth) */}
@@ -61,7 +93,10 @@ export default function AppRouter() {
       <Route
         path="/admin/*"
         element={
-          <RequireSession loginPath="/admin/login">
+          <RequireSession
+            loginPath="/admin/login"
+            allowedRoles={["ADMIN", "TERAPEUTA"]}
+          >
             <AdminLayout basePath="/admin" />
           </RequireSession>
         }
@@ -71,7 +106,10 @@ export default function AppRouter() {
       <Route
         path="/portal-admin/*"
         element={
-          <RequireSession loginPath="/portal-admin/login">
+          <RequireSession
+            loginPath="/portal-admin/login"
+            allowedRoles={["ADMIN", "TERAPEUTA"]}
+          >
             <AdminLayout basePath="/portal-admin" />
           </RequireSession>
         }
@@ -82,4 +120,3 @@ export default function AppRouter() {
     </Routes>
   );
 }
-

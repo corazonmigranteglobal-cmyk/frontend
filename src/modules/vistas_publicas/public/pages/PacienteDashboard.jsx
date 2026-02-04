@@ -229,7 +229,7 @@ export default function PacienteDashboard() {
             <footer className="border-t border-black/5 dark:border-white/10 mt-12">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                     <p className="text-center text-xs text-slate-400 dark:text-slate-600">
-                        © 2024 Corazón de Migrante. Todos los derechos reservados.
+                        © 2026 Corazón de Migrante. Todos los derechos reservados.
                     </p>
                 </div>
             </footer>
