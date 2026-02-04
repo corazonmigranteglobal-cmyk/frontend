@@ -145,8 +145,8 @@ export function useBooking() {
                     p_id_usuario_paciente: authParams.p_actor_user_id,
                     p_id_producto: idProducto,
                     p_fecha: fecha,
-                    p_hora_inicio: horaInicio,
-                    p_hora_fin: horaFin,
+                    p_inicio: horaInicio,
+                    p_fin: horaFin,
                     p_notas: notas,
                 },
             };
