@@ -82,7 +82,7 @@ export function useBooking() {
             const payload = {
                 args: {
                     ...authParams,
-                    p_id_terapeuta: idTerapeuta,
+                    p_id_usuario_terapeuta: idTerapeuta,
                 },
             };
 
@@ -130,8 +130,8 @@ export function useBooking() {
             const payload = {
                 args: {
                     ...authParams,
-                    p_id_terapeuta: idTerapeuta,
-                    p_id_paciente: authParams.p_actor_user_id,
+                    p_id_usuario_terapeuta: idTerapeuta,
+                    p_id_usuario_paciente: authParams.p_actor_user_id,
                     p_id_producto: idProducto,
                     p_fecha: fecha,
                     p_hora_inicio: horaInicio,
