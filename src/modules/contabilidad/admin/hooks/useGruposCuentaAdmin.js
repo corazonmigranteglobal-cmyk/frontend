@@ -22,7 +22,9 @@ function mapGrupoRow(r) {
     codigo: r.codigo ?? "",
     nombre: r.nombre ?? "",
     tipo_grupo: r.tipo_grupo ?? "",
-    id_grupo_padre: r.id_grupo_padre ?? null,
+    // Algunos endpoints pueden devolver 0 para "sin padre".
+    // Normalizamos a null para evitar mandar 0 al backend.
+    id_grupo_padre: r.id_grupo_padre ? r.id_grupo_padre : null,
     grupo_padre_nombre: r.grupo_padre_nombre ?? null,
     register_status: r.register_status ?? "Activo",
     // estos campos suelen venir en crear/editar/apagar
@@ -122,19 +124,19 @@ export function useGruposCuentaAdmin(session, { autoFetch = true, limit = 200 } 
       setError("");
       try {
         const page = Math.floor((Number(offset) || 0) / (Number(limit) || 1)) + 1;
-                const payload = {
-                    ...getActorPayload(session),
+        const payload = {
+          ...getActorPayload(session),
 
-                    // Paginación (compatibilidad)
-                    p_limit: limit,
-                    p_offset: offset,
-                    limit,
-                    offset,
-                    page,
-                    page_size: limit,
-                    p_page: page,
-                    p_page_size: limit,
-                };
+          // Paginación (compatibilidad)
+          p_limit: limit,
+          p_offset: offset,
+          limit,
+          offset,
+          page,
+          page_size: limit,
+          p_page: page,
+          p_page_size: limit,
+        };
 
         const res = assertDbOk(await createApiConn(endpoint, payload, "POST", session));
         const list = Array.isArray(res?.rows) ? res.rows.map(mapGrupoRow) : [];
