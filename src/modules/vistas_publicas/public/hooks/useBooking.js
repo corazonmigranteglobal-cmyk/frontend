@@ -93,7 +93,18 @@ export function useBooking() {
                 session
             );
 
-            const horarios = res?.rows?.[0]?.horarios || [];
+            // API returns rows directly, not nested
+            // Each row has: fecha, inicio, fin (ISO strings)
+            const horarios = (res?.rows || []).map(h => ({
+                ...h,
+                // Normalize fecha to date string (YYYY-MM-DD)
+                fecha: h.fecha ? h.fecha.split('T')[0] : null,
+                // Extract time from ISO datetime
+                hora_inicio: h.inicio ? new Date(h.inicio).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false }) : null,
+                hora_fin: h.fin ? new Date(h.fin).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false }) : null,
+                disponible: true, // All returned slots are available
+            }));
+
             setDisponibilidad(horarios);
             return horarios;
 
