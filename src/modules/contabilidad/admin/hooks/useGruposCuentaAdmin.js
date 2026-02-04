@@ -16,15 +16,25 @@ function assertDbOk(res) {
   return res;
 }
 
+// Normaliza el "grupo padre":
+// - "" / null / undefined  -> null
+// - "0" / 0 / NaN / <= 0   -> null  (raíz)
+// - > 0                    -> Number(id)
+function normalizeParentId(v) {
+  if (v === "" || v === null || v === undefined) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
 function mapGrupoRow(r) {
   return {
     id_grupo_cuenta: r.id_grupo_cuenta ?? r.id ?? null,
     codigo: r.codigo ?? "",
     nombre: r.nombre ?? "",
     tipo_grupo: r.tipo_grupo ?? "",
-    // Algunos endpoints pueden devolver 0 para "sin padre".
-    // Normalizamos a null para evitar mandar 0 al backend.
-    id_grupo_padre: r.id_grupo_padre ? r.id_grupo_padre : null,
+    // Algunos endpoints pueden devolver 0/"0" para "sin padre" -> null
+    id_grupo_padre: normalizeParentId(r.id_grupo_padre),
     grupo_padre_nombre: r.grupo_padre_nombre ?? null,
     register_status: r.register_status ?? "Activo",
     // estos campos suelen venir en crear/editar/apagar
@@ -153,6 +163,7 @@ export function useGruposCuentaAdmin(session, { autoFetch = true, limit = 200 } 
         for (const [id, c] of Object.entries(cachedById || {})) {
           if (!seen.has(String(id))) merged.unshift(c);
         }
+
         setRows(merged);
         return merged;
       } catch (e) {
@@ -176,7 +187,8 @@ export function useGruposCuentaAdmin(session, { autoFetch = true, limit = 200 } 
         ...getActorPayload(session),
         p_nombre: grupo.nombre,
         p_codigo: grupo.codigo,
-        p_id_grupo_padre: grupo.id_grupo_padre ?? null,
+        // ✅ nunca manda 0/"0"
+        p_id_grupo_padre: normalizeParentId(grupo.id_grupo_padre),
         p_tipo_grupo: grupo.tipo_grupo,
         p_metadata: grupo.metadata ?? {},
       };
@@ -184,9 +196,11 @@ export function useGruposCuentaAdmin(session, { autoFetch = true, limit = 200 } 
       const res = assertDbOk(await createApiConn(endpoint, payload, "POST", session));
       const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
       const grupoResp = r0?.data?.grupo_cuenta;
+
       if (grupoResp?.id_grupo_cuenta) {
         const mapped = mapGrupoRow(grupoResp);
         if (cacheKey) upsertCacheRow(cacheKey, mapped.id_grupo_cuenta, mapped);
+
         setRows((prev) => {
           const idx = prev.findIndex((x) => x.id_grupo_cuenta === mapped.id_grupo_cuenta);
           if (idx >= 0) {
@@ -197,6 +211,7 @@ export function useGruposCuentaAdmin(session, { autoFetch = true, limit = 200 } 
           return [mapped, ...prev];
         });
       }
+
       return res;
     },
     [session, cacheKey]
@@ -214,7 +229,8 @@ export function useGruposCuentaAdmin(session, { autoFetch = true, limit = 200 } 
         p_id_grupo_cuenta: grupo.id_grupo_cuenta,
         p_nombre: grupo.nombre,
         p_codigo: grupo.codigo,
-        p_id_grupo_padre: grupo.id_grupo_padre ?? null,
+        // ✅ nunca manda 0/"0"
+        p_id_grupo_padre: normalizeParentId(grupo.id_grupo_padre),
         p_tipo_grupo: grupo.tipo_grupo,
         p_register_status: grupo.register_status ?? "Activo",
         // Importante: listar no trae metadata; no forzar {} para no sobre-escribir.
@@ -225,11 +241,15 @@ export function useGruposCuentaAdmin(session, { autoFetch = true, limit = 200 } 
       const res = assertDbOk(await createApiConn(endpoint, payload, "POST", session));
       const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
       const grupoResp = r0?.data?.grupo_cuenta;
+
       if (grupoResp?.id_grupo_cuenta) {
         const mapped = mapGrupoRow(grupoResp);
         if (cacheKey) upsertCacheRow(cacheKey, mapped.id_grupo_cuenta, mapped);
-        setRows((prev) => prev.map((x) => (x.id_grupo_cuenta === mapped.id_grupo_cuenta ? { ...x, ...mapped } : x)));
+        setRows((prev) =>
+          prev.map((x) => (x.id_grupo_cuenta === mapped.id_grupo_cuenta ? { ...x, ...mapped } : x))
+        );
       }
+
       return res;
     },
     [session, cacheKey]
@@ -251,11 +271,15 @@ export function useGruposCuentaAdmin(session, { autoFetch = true, limit = 200 } 
       const res = assertDbOk(await createApiConn(endpoint, payload, "POST", session));
       const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
       const grupoResp = r0?.data?.grupo_cuenta;
+
       if (grupoResp?.id_grupo_cuenta) {
         const mapped = mapGrupoRow(grupoResp);
         if (cacheKey) upsertCacheRow(cacheKey, mapped.id_grupo_cuenta, mapped);
-        setRows((prev) => prev.map((x) => (x.id_grupo_cuenta === mapped.id_grupo_cuenta ? { ...x, ...mapped } : x)));
+        setRows((prev) =>
+          prev.map((x) => (x.id_grupo_cuenta === mapped.id_grupo_cuenta ? { ...x, ...mapped } : x))
+        );
       }
+
       return res;
     },
     [session, cacheKey]
