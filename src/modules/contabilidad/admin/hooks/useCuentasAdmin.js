@@ -122,10 +122,19 @@ export function useCuentasAdmin(session, { autoFetch = true, limit = 200 } = {})
             setIsLoading(true);
             setError("");
             try {
+                const page = Math.floor((Number(offset) || 0) / (Number(limit) || 1)) + 1;
                 const payload = {
                     ...getActorPayload(session),
+
+                    // Paginación (compatibilidad)
                     p_limit: limit,
                     p_offset: offset,
+                    limit,
+                    offset,
+                    page,
+                    page_size: limit,
+                    p_page: page,
+                    p_page_size: limit,
                 };
 
                 const res = assertDbOk(await createApiConn(endpoint, payload, "POST", session));

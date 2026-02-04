@@ -1,4 +1,5 @@
 import React from "react";
+import { normalizeEstado } from "../utils/estado";
 
 export default function SolicitudDetail({
     selected,
@@ -11,10 +12,10 @@ export default function SolicitudDetail({
     onOpenConfirm,
     className = "col-span-12 lg:col-span-8",
 }) {
-    const estadoUpper = String(selected?.estado || "").toUpperCase();
+    const estadoUpper = normalizeEstado(selected?.estado);
 
-    const disableConfirm = estadoUpper === "CANCELADA" || estadoUpper === "CONFIRMADA";
-    const disableAll = estadoUpper === "CANCELADA";
+    const disableConfirm = estadoUpper === "CANCELADO" || estadoUpper === "CONFIRMADO";
+    const disableAll = estadoUpper === "CANCELADO";
 
     const disableReject = disableAll;
     const disableReprogram = disableAll;
@@ -66,8 +67,8 @@ export default function SolicitudDetail({
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-10">
-                <div className="grid grid-cols-2 gap-x-12 gap-y-10">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 sm:p-8 lg:p-10">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-10">
                     <div className="space-y-8">
                         <div>
                             <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-5">
@@ -81,7 +82,7 @@ export default function SolicitudDetail({
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Correo</p>
-                                        <p className="text-slate-900 font-semibold">{selected?.correo}</p>
+                                        <p className="text-slate-900 font-semibold break-all">{selected?.correo}</p>
                                     </div>
                                 </div>
 
@@ -91,7 +92,7 @@ export default function SolicitudDetail({
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Teléfono</p>
-                                        <p className="text-slate-900 font-semibold">{selected?.telefono}</p>
+                                        <p className="text-slate-900 font-semibold break-words">{selected?.telefono}</p>
                                     </div>
                                 </div>
                             </div>
@@ -137,7 +138,7 @@ export default function SolicitudDetail({
                             </h3>
 
                             <textarea
-                                className="w-full bg-slate-50 border-slate-200 rounded-2xl text-sm p-5 focus:ring-primary focus:border-primary transition-all min-h-[160px] placeholder:italic shadow-inner"
+                                className="w-full bg-slate-50 border-slate-200 rounded-2xl text-sm p-5 focus:ring-primary focus:border-primary transition-all min-h-[140px] lg:min-h-[160px] placeholder:italic shadow-inner resize-y"
                                 placeholder="Describa el motivo de la reprogramación / cancelación"
                                 value={notes}
                                 onChange={(e) => setNotes(e.target.value)}

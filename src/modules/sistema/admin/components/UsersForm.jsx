@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { USUARIOS_ENDPOINTS } from "../../../../config/USUARIOS_ENDPOINTS";
 import { ROUTES_FILE_SERVER } from "../../../../config/ROUTES_FILE_SERVER";
 import { createApiConn } from "../../../../helpers/api_conn_factory";
+import { useAdminOptions } from "../context/AdminOptionsContext";
 
 const isBlank = (v) => (v ?? "").toString().trim().length === 0;
 
@@ -50,7 +51,6 @@ function uniqStrings(arr) {
 }
 
 function normalizePaisCiudad(raw) {
-    // Esperado: [{pais:"Bolivia", ciudades:["SCZ","LPZ"]}] o {pais: ["ciudad1"...]} o similar
     const arr = toArraySmart(raw);
 
     // Caso A: array de objetos {pais, ciudades}
@@ -83,6 +83,195 @@ function normalizePaisCiudad(raw) {
     return [];
 }
 
+function tagsToString(tagsArr) {
+    const clean = uniqStrings(tagsArr);
+    return clean.length ? clean.join(", ") : null;
+}
+
+/* =========================
+   MultiSelectTag (dropdown + chips)
+========================= */
+function useOnClickOutside(ref, handler, when = true) {
+    useEffect(() => {
+        if (!when) return;
+        const listener = (event) => {
+            if (!ref.current) return;
+            if (ref.current.contains(event.target)) return;
+            handler(event);
+        };
+        document.addEventListener("mousedown", listener);
+        document.addEventListener("touchstart", listener);
+        return () => {
+            document.removeEventListener("mousedown", listener);
+            document.removeEventListener("touchstart", listener);
+        };
+    }, [ref, handler, when]);
+}
+
+function MultiSelectTags({
+    label,
+    optionalLabel,
+    options,
+    selected,
+    onChange,
+    placeholder = "Seleccionar...",
+    disabled = false,
+}) {
+    const [open, setOpen] = useState(false);
+    const [q, setQ] = useState("");
+    const wrapRef = useRef(null);
+
+    useOnClickOutside(wrapRef, () => setOpen(false), open);
+
+    const normalizedOptions = useMemo(() => uniqStrings(options), [options]);
+
+    const filtered = useMemo(() => {
+        const qq = q.trim().toLowerCase();
+        if (!qq) return normalizedOptions;
+        return normalizedOptions.filter((x) => x.toLowerCase().includes(qq));
+    }, [normalizedOptions, q]);
+
+    const selectedSet = useMemo(() => new Set(selected || []), [selected]);
+
+    const toggleItem = (item) => {
+        if (disabled) return;
+        const s = (item ?? "").toString().trim();
+        if (!s) return;
+
+        const curr = Array.isArray(selected) ? selected : [];
+        if (selectedSet.has(s)) onChange(curr.filter((x) => x !== s));
+        else onChange([...curr, s]);
+    };
+
+    const removeItem = (item) => {
+        if (disabled) return;
+        const curr = Array.isArray(selected) ? selected : [];
+        onChange(curr.filter((x) => x !== item));
+    };
+
+    const clearAll = () => {
+        if (disabled) return;
+        onChange([]);
+    };
+
+    return (
+        <div ref={wrapRef} className="relative">
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                {label}{" "}
+                {optionalLabel ? (
+                    <span className="font-semibold normal-case tracking-normal">{optionalLabel}</span>
+                ) : null}
+            </label>
+
+            <button
+                type="button"
+                onClick={() => !disabled && setOpen((v) => !v)}
+                className={
+                    "w-full text-left bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-10 text-sm outline-none " +
+                    (disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-white hover:border-primary")
+                }
+            >
+                <div className="flex flex-wrap gap-2">
+                    {selected?.length ? (
+                        selected.map((t) => (
+                            <span
+                                key={t}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white border border-slate-200 text-xs font-semibold text-slate-700"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                }}
+                            >
+                                {t}
+                                <span
+                                    className="material-symbols-outlined text-[16px] text-slate-400 hover:text-slate-800 cursor-pointer"
+                                    onClick={() => removeItem(t)}
+                                    title="Quitar"
+                                >
+                                    close
+                                </span>
+                            </span>
+                        ))
+                    ) : (
+                        <span className="text-slate-400">{placeholder}</span>
+                    )}
+                </div>
+            </button>
+
+            <span className="material-symbols-outlined absolute right-3 top-[38px] text-slate-400 text-sm pointer-events-none">
+                expand_more
+            </span>
+
+            {open && !disabled && (
+                <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+                    <div className="p-3 border-b border-slate-100 bg-slate-50">
+                        <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-slate-400 text-[18px]">search</span>
+                            <input
+                                value={q}
+                                onChange={(e) => setQ(e.target.value)}
+                                placeholder="Buscar..."
+                                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
+                            />
+                            <button
+                                type="button"
+                                onClick={clearAll}
+                                className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-slate-800"
+                                title="Limpiar"
+                            >
+                                Limpiar
+                            </button>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-2">
+                            {selected?.length ? `${selected.length} seleccionado(s)` : "Sin selección"}
+                        </p>
+                    </div>
+
+                    <div className="max-h-56 overflow-y-auto p-2">
+                        {filtered.length === 0 ? (
+                            <div className="p-3 text-sm text-slate-500">Sin resultados.</div>
+                        ) : (
+                            filtered.map((item) => {
+                                const active = selectedSet.has(item);
+                                return (
+                                    <button
+                                        key={item}
+                                        type="button"
+                                        onClick={() => toggleItem(item)}
+                                        className={
+                                            "w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm text-left " +
+                                            (active ? "bg-primary/10 text-slate-900" : "hover:bg-slate-50 text-slate-700")
+                                        }
+                                    >
+                                        <span className="font-medium">{item}</span>
+                                        <span
+                                            className={
+                                                "material-symbols-outlined text-[18px] " + (active ? "text-primary" : "text-slate-300")
+                                            }
+                                        >
+                                            check_circle
+                                        </span>
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+
+                    <div className="p-2 border-t border-slate-100 bg-white">
+                        <button
+                            type="button"
+                            onClick={() => setOpen(false)}
+                            className="w-full px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold uppercase tracking-widest hover:bg-black"
+                        >
+                            Listo
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function UsersForm({ initialTipo = "Administrador" }) {
     const [tipo, setTipo] = useState(initialTipo);
 
@@ -101,13 +290,18 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
     const [profesionesList, setProfesionesList] = useState([]);
     const [especialidadesList, setEspecialidadesList] = useState([]);
 
-    // ✅ nuevas listas
     const [paisCiudadList, setPaisCiudadList] = useState([]); // [{pais, ciudades}]
     const [ocupacionesList, setOcupacionesList] = useState([]);
     const [sintomasList, setSintomasList] = useState([]);
     const [objetivosList, setObjetivosList] = useState([]);
 
-    // therapist specifics
+    const {
+        profesiones: cachedProfesiones,
+        especialidades: cachedEspecialidades,
+        paisesCiudades: cachedPaisesCiudades,
+    } = useAdminOptions();
+
+    // terapeuta
     const [tituloProfesional, setTituloProfesional] = useState("");
     const [especialidadPrinc, setEspecialidadPrinc] = useState("");
     const [descripcionPerfil, setDescripcionPerfil] = useState("");
@@ -125,74 +319,47 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
         auditoria: false,
     });
 
-    // paciente
+    // paciente (multi tags)
     const [motivoConsulta, setMotivoConsulta] = useState("");
-    const [sintomasPrincipales, setSintomasPrincipales] = useState("");
-    const [objetivos, setObjetivos] = useState("");
-    const [ocupacion, setOcupacion] = useState("");
+    const [sintomasTags, setSintomasTags] = useState([]);
+    const [objetivosTags, setObjetivosTags] = useState([]);
+    const [ocupacionTags, setOcupacionTags] = useState([]);
 
     const [terapeutasDisponibles, setTerapeutasDisponibles] = useState([]);
     const [selectedTerapeuta, setSelectedTerapeuta] = useState("");
 
-    // UX validation
+    // UX
     const [touched, setTouched] = useState({});
     const [didSubmit, setDidSubmit] = useState(false);
 
-    // UX request
     const [submitting, setSubmitting] = useState(false);
     const [banner, setBanner] = useState({ type: "", message: "" });
 
     const toggle = (k) => (e) => setPrivs((p) => ({ ...p, [k]: e.target.checked }));
     const markTouched = (key) => setTouched((t) => ({ ...t, [key]: true }));
 
-    useEffect(() => {
-        setTipo(initialTipo);
-    }, [initialTipo]);
+    useEffect(() => setTipo(initialTipo), [initialTipo]);
 
-    // ✅ Cargar TODAS las listas externas una vez (usando ROUTES_FILE_SERVER)
+    // Listas externas (ocupaciones/síntomas/objetivos se cargan aquí).
+    // Especialidades/Profesiones/Paises-Ciudades vienen cacheadas desde AdminOptionsProvider.
     useEffect(() => {
         let mounted = true;
 
         const loadLists = async () => {
             try {
-                const [
-                    espRes,
-                    profRes,
-                    paisCiudadRes,
-                    ocupRes,
-                    sintRes,
-                    objRes,
-                ] = await Promise.all([
-                    fetch(ROUTES_FILE_SERVER.URL_ESPECIALIDADES),
-                    fetch(ROUTES_FILE_SERVER.URL_PROFESIONES),
-                    fetch(ROUTES_FILE_SERVER.URL_PAIS_CIUDAD),
+                const [ocupRes, sintRes, objRes] = await Promise.all([
                     fetch(ROUTES_FILE_SERVER.URL_OCUPACIONES),
                     fetch(ROUTES_FILE_SERVER.URL_SINTOMAS),
                     fetch(ROUTES_FILE_SERVER.URL_OBJETIVOS),
                 ]);
 
-                const [
-                    espData,
-                    profData,
-                    paisCiudadData,
-                    ocupData,
-                    sintData,
-                    objData,
-                ] = await Promise.all([
-                    espRes.json(),
-                    profRes.json(),
-                    paisCiudadRes.json(),
+                const [ocupData, sintData, objData] = await Promise.all([
                     ocupRes.json(),
                     sintRes.json(),
                     objRes.json(),
                 ]);
 
                 if (!mounted) return;
-
-                setProfesionesList(uniqStrings(toArraySmart(profData)));
-                setEspecialidadesList(uniqStrings(toArraySmart(espData)));
-
-                setPaisCiudadList(normalizePaisCiudad(paisCiudadData));
 
                 setOcupacionesList(uniqStrings(toArraySmart(ocupData)));
                 setSintomasList(uniqStrings(toArraySmart(sintData)));
@@ -203,12 +370,24 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
         };
 
         loadLists();
-        return () => {
-            mounted = false;
-        };
+        return () => (mounted = false);
     }, []);
 
-    // ✅ Derivados País/Ciudad
+    // Inyectar listas cacheadas
+    useEffect(() => {
+        setProfesionesList(uniqStrings(toArraySmart(cachedProfesiones)));
+    }, [cachedProfesiones]);
+
+    useEffect(() => {
+        setEspecialidadesList(uniqStrings(toArraySmart(cachedEspecialidades)));
+    }, [cachedEspecialidades]);
+
+    useEffect(() => {
+        if (!cachedPaisesCiudades) return;
+        setPaisCiudadList(normalizePaisCiudad(cachedPaisesCiudades));
+    }, [cachedPaisesCiudades]);
+
+    // País/Ciudad derivadas
     const paisOptions = useMemo(() => {
         return uniqStrings(paisCiudadList.map((x) => x.pais)).sort((a, b) => a.localeCompare(b));
     }, [paisCiudadList]);
@@ -219,31 +398,23 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
         return uniqStrings(found?.ciudades || []).sort((a, b) => a.localeCompare(b));
     }, [paisCiudadList, pais]);
 
-    // ✅ Cuando cambia el país, resetea ciudad si ya no aplica
     useEffect(() => {
         if (isBlank(pais)) {
             setCiudad("");
             return;
         }
-        if (ciudad && !ciudadOptions.includes(ciudad)) {
-            setCiudad("");
-        }
+        if (ciudad && !ciudadOptions.includes(ciudad)) setCiudad("");
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pais]);
 
-    // Load terapeutas when admin
+    // Terapeutas disponibles (solo Admin)
     useEffect(() => {
         if (tipo !== "Administrador") return;
 
         let mounted = true;
-
         const fetchTerapeutas = async () => {
             try {
-                const response = await createApiConn(
-                    USUARIOS_ENDPOINTS.TERAPEUTAS_SIN_ADMIN_LISTAR,
-                    {},
-                    "GET"
-                );
+                const response = await createApiConn(USUARIOS_ENDPOINTS.TERAPEUTAS_SIN_ADMIN_LISTAR, {}, "GET");
 
                 let rows = [];
                 if (response && Array.isArray(response.rows)) rows = response.rows;
@@ -260,14 +431,10 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
         };
 
         fetchTerapeutas();
-        return () => {
-            mounted = false;
-        };
+        return () => (mounted = false);
     }, [tipo]);
 
-    useEffect(() => {
-        setBanner({ type: "", message: "" });
-    }, [tipo]);
+    useEffect(() => setBanner({ type: "", message: "" }), [tipo]);
 
     const errors = useMemo(() => {
         const e = {};
@@ -307,7 +474,6 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
         if (tipo === "Paciente") {
             if (isBlank(pais)) e.pais = "País es obligatorio.";
             if (isBlank(ciudad)) e.ciudad = "Ciudad es obligatoria.";
-            // opcionales: ocupacion, motivoConsulta, sintomasPrincipales, objetivos
         }
 
         return e;
@@ -358,9 +524,9 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
         setValorSesionBase("");
 
         setMotivoConsulta("");
-        setSintomasPrincipales("");
-        setObjetivos("");
-        setOcupacion("");
+        setSintomasTags([]);
+        setObjetivosTags([]);
+        setOcupacionTags([]);
 
         setTouched({});
         setDidSubmit(false);
@@ -427,14 +593,18 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                     p_pais: pais.trim(),
                     p_ciudad: ciudad.trim(),
 
-                    // ✅ ahora vienen de selects (igual se envían como string)
-                    p_motivo_consulta: motivoConsulta.trim() || null,
-                    p_sintomas_principales: sintomasPrincipales.trim() || null,
-                    p_objetivos: objetivos.trim() || null,
-                    p_ocupacion: ocupacion.trim() || null,
+                    p_metadata: {
+                        tags: {
+                            ocupacion: ocupacionTags || [],
+                            sintomas: sintomasTags || [],
+                            objetivos: objetivosTags || [],
+                        },
+                        motivo_consulta: motivoConsulta?.trim() || null,
+                    },
                 };
 
                 const res = await createApiConn(USUARIOS_ENDPOINTS.REGISTRAR_PACIENTE, payload, "POST");
+
                 if (parseOk(res)) {
                     setBanner({ type: "success", message: "Paciente registrado exitosamente." });
                     limpiar();
@@ -444,6 +614,7 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                 return;
             }
 
+            // Administrador
             const payload = {
                 p_email: email.trim(),
                 p_password: password,
@@ -481,13 +652,14 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
     ];
 
     return (
-        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full">
+        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full flex flex-col md-5">
             <div className="px-7 py-6 border-b border-slate-200 bg-brand-cream">
                 <h3 className="text-lg font-bold text-slate-900">Registro de Usuario</h3>
                 <p className="text-xs text-slate-500 mt-1">Crea accesos administrativos / terapeutas / pacientes</p>
             </div>
 
-            <div className="p-7 space-y-6 overflow-y-auto max-h-[calc(100vh-210px)]">
+            <div className="p-7 space-y-6 overflow-y-auto flex-1 min-h-0">
+
                 {banner.type && (
                     <div
                         className={
@@ -522,13 +694,9 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
 
                 {/* Email */}
                 <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                        Email *
-                    </label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Email *</label>
                     <div className="relative">
-                        <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">
-                            mail
-                        </span>
+                        <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">mail</span>
                         <input
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
@@ -551,9 +719,7 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                             Contraseña * (mín. 8)
                         </label>
                         <div className="relative">
-                            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">
-                                lock
-                            </span>
+                            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">lock</span>
                             <input
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
@@ -574,9 +740,7 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                             Confirmar contraseña *
                         </label>
                         <div className="relative">
-                            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">
-                                lock
-                            </span>
+                            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">lock</span>
                             <input
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -598,13 +762,9 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                 {/* Datos personales */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                            Nombres *
-                        </label>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Nombres *</label>
                         <div className="relative">
-                            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">
-                                person
-                            </span>
+                            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">person</span>
                             <input
                                 value={nombre}
                                 onChange={(e) => setNombre(e.target.value)}
@@ -625,9 +785,7 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                             Apellidos *
                         </label>
                         <div className="relative">
-                            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">
-                                person
-                            </span>
+                            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">person</span>
                             <input
                                 value={apellido}
                                 onChange={(e) => setApellido(e.target.value)}
@@ -650,9 +808,7 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                             Teléfono {tipo === "Paciente" ? "(opcional)" : "*"}
                         </label>
                         <div className="relative">
-                            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">
-                                call
-                            </span>
+                            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">call</span>
                             <input
                                 value={telefono}
                                 onChange={(e) => setTelefono(e.target.value)}
@@ -695,13 +851,9 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
 
                 {/* Sexo */}
                 <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                        Sexo *
-                    </label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Sexo *</label>
                     <div className="relative">
-                        <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">
-                            person
-                        </span>
+                        <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-xl">person</span>
                         <select
                             value={sexo}
                             onChange={(e) => setSexo(e.target.value)}
@@ -722,7 +874,9 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                     {showError("sexo") && <p className="text-xs text-red-600 font-semibold mt-2">{errors.sexo}</p>}
                 </div>
 
-                {/* TERAPEUTA */}
+                {/* =========================
+            TERAPEUTA (no se toca)
+        ========================= */}
                 {tipo === "Terapeuta" && (
                     <div className="space-y-6 border-t border-dashed border-slate-200 pt-6">
                         <p className="text-xs font-bold text-primary uppercase tracking-widest">Datos Profesionales</p>
@@ -739,7 +893,7 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                                         onChange={(e) => setTituloProfesional(e.target.value)}
                                         onBlur={() => markTouched("tituloProfesional")}
                                         className={
-                                            "w-full bg-slate-50 border rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer " +
+                                            "w-full bg-slate-50 border rounded-xl py-3 px-4 pr-10 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer " +
                                             (showError("tituloProfesional") ? "border-red-300" : "border-slate-200")
                                         }
                                     >
@@ -770,7 +924,7 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                                         onChange={(e) => setEspecialidadPrinc(e.target.value)}
                                         onBlur={() => markTouched("especialidadPrinc")}
                                         className={
-                                            "w-full bg-slate-50 border rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer " +
+                                            "w-full bg-slate-50 border rounded-xl py-3 px-4 pr-10 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer " +
                                             (showError("especialidadPrinc") ? "border-red-300" : "border-slate-200")
                                         }
                                     >
@@ -811,7 +965,7 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                             )}
                         </div>
 
-                        {/* opcionales */}
+                        {/* Frase Personal */}
                         <div>
                             <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
                                 Frase Personal (opcional)
@@ -825,6 +979,7 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                             />
                         </div>
 
+                        {/* Youtube */}
                         <div>
                             <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
                                 Link Video Youtube (opcional)
@@ -838,7 +993,7 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                             />
                         </div>
 
-                        {/* matrícula + valor */}
+                        {/* Matrícula + Valor */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
@@ -881,7 +1036,7 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                             </div>
                         </div>
 
-                        {/* ✅ País/Ciudad SELECTS */}
+                        {/* País/Ciudad selects */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
@@ -950,7 +1105,9 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                     </div>
                 )}
 
-                {/* ADMIN */}
+                {/* =========================
+            ADMIN
+        ========================= */}
                 {tipo === "Administrador" && (
                     <div className="pt-4 border-t border-dashed border-slate-200">
                         <div className="mb-4">
@@ -983,7 +1140,6 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                                     expand_more
                                 </span>
                             </div>
-                            <p className="text-[10px] text-slate-400 mt-1">Selecciona un terapeuta si este administrador gestionará su cuenta.</p>
                         </div>
 
                         <div className="border-t border-dashed border-slate-200 pt-4" />
@@ -1016,12 +1172,14 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                     </div>
                 )}
 
-                {/* PACIENTE */}
+                {/* =========================
+            PACIENTE (multi tags)
+        ========================= */}
                 {tipo === "Paciente" && (
                     <div className="space-y-6 border-t border-dashed border-slate-200 pt-6">
                         <p className="text-xs font-bold text-primary uppercase tracking-widest">Datos del Paciente</p>
 
-                        {/* ✅ País/Ciudad SELECTS */}
+                        {/* País/Ciudad */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
@@ -1088,31 +1246,16 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                             </div>
                         </div>
 
-                        {/* ✅ Ocupación SELECT */}
-                        <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                Ocupación (opcional)
-                            </label>
-                            <div className="relative">
-                                <select
-                                    value={ocupacion}
-                                    onChange={(e) => setOcupacion(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 pr-10 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer"
-                                >
-                                    <option value="">{ocupacionesList.length ? "Seleccionar ocupación" : "Cargando ocupaciones..."}</option>
-                                    {ocupacionesList.map((o) => (
-                                        <option key={o} value={o}>
-                                            {o}
-                                        </option>
-                                    ))}
-                                </select>
-                                <span className="material-symbols-outlined absolute right-3 top-3 text-slate-400 text-sm pointer-events-none">
-                                    expand_more
-                                </span>
-                            </div>
-                        </div>
+                        {/* Multi tags */}
+                        <MultiSelectTags
+                            label="Ocupación"
+                            optionalLabel="(opcional)"
+                            options={ocupacionesList}
+                            selected={ocupacionTags}
+                            onChange={setOcupacionTags}
+                            placeholder="Seleccionar ocupación(es)"
+                        />
 
-                        {/* Motivo sigue siendo libre (si lo quieres select también, dime de qué endpoint) */}
                         <div>
                             <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
                                 Motivo de Consulta (opcional)
@@ -1125,53 +1268,23 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                             />
                         </div>
 
-                        {/* ✅ Síntomas SELECT */}
-                        <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                Síntomas Principales (opcional)
-                            </label>
-                            <div className="relative">
-                                <select
-                                    value={sintomasPrincipales}
-                                    onChange={(e) => setSintomasPrincipales(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 pr-10 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer"
-                                >
-                                    <option value="">{sintomasList.length ? "Seleccionar síntoma" : "Cargando síntomas..."}</option>
-                                    {sintomasList.map((s) => (
-                                        <option key={s} value={s}>
-                                            {s}
-                                        </option>
-                                    ))}
-                                </select>
-                                <span className="material-symbols-outlined absolute right-3 top-3 text-slate-400 text-sm pointer-events-none">
-                                    expand_more
-                                </span>
-                            </div>
-                        </div>
+                        <MultiSelectTags
+                            label="Síntomas Principales"
+                            optionalLabel="(opcional)"
+                            options={sintomasList}
+                            selected={sintomasTags}
+                            onChange={setSintomasTags}
+                            placeholder="Seleccionar síntoma(s)"
+                        />
 
-                        {/* ✅ Objetivos SELECT */}
-                        <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                Objetivos (opcional)
-                            </label>
-                            <div className="relative">
-                                <select
-                                    value={objetivos}
-                                    onChange={(e) => setObjetivos(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 pr-10 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer"
-                                >
-                                    <option value="">{objetivosList.length ? "Seleccionar objetivo" : "Cargando objetivos..."}</option>
-                                    {objetivosList.map((o) => (
-                                        <option key={o} value={o}>
-                                            {o}
-                                        </option>
-                                    ))}
-                                </select>
-                                <span className="material-symbols-outlined absolute right-3 top-3 text-slate-400 text-sm pointer-events-none">
-                                    expand_more
-                                </span>
-                            </div>
-                        </div>
+                        <MultiSelectTags
+                            label="Objetivos"
+                            optionalLabel="(opcional)"
+                            options={objetivosList}
+                            selected={objetivosTags}
+                            onChange={setObjetivosTags}
+                            placeholder="Seleccionar objetivo(s)"
+                        />
                     </div>
                 )}
 

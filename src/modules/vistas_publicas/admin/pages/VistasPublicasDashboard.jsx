@@ -118,7 +118,7 @@ export default function VistasPublicasDashboard({ session, onLogout, activeTab, 
                         Fundación Corazón de Migrante
                     </p>
                     <p className="text-[10px] text-gray-500 font-light">
-                        © 2024 Todos los derechos reservados. Sistema de Gestión Premium.
+                        © 2026 Todos los derechos reservados. Sistema de Gestión Premium.
                     </p>
                 </footer>
             </main>

@@ -94,7 +94,7 @@ function getCachedById(key) {
   return base?.[CACHE_ENTITY]?.byId || {};
 }
 
-export function useCentrosCostoAdmin(session) {
+export function useCentrosCostoAdmin(session, { autoFetch = true, limit = 200 } = {}) {
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -107,7 +107,7 @@ export function useCentrosCostoAdmin(session) {
     ensureEntityCache(cacheKey);
   }, [cacheKey]);
 
-  const fetchCentros = useCallback(async () => {
+  const fetchCentros = useCallback(async ({ offset = 0 } = {}) => {
     const endpoint = CONTABILIDAD_ENDPOINT?.CENTRO_COSTO_LISTAR;
     if (!endpoint) throw new Error("Endpoint CENTRO_COSTO_LISTAR no definido");
     if (!session?.id_sesion) throw new Error("Sesión inválida (id_sesion faltante)");
@@ -115,8 +115,19 @@ export function useCentrosCostoAdmin(session) {
     setIsLoading(true);
     setError("");
     try {
+      const page = Math.floor((Number(offset) || 0) / (Number(limit) || 1)) + 1;
       const payload = {
         ...getActorPayload(session),
+
+        // Paginación (compatibilidad)
+        p_limit: limit,
+        p_offset: offset,
+        limit,
+        offset,
+        page,
+        page_size: limit,
+        p_page: page,
+        p_page_size: limit,
       };
       const resp = assertDbOk(await createApiConn(endpoint, payload, "POST", session));
       const list = mapListResponse(resp);
@@ -141,12 +152,13 @@ export function useCentrosCostoAdmin(session) {
     } finally {
       setIsLoading(false);
     }
-  }, [session, cacheKey]);
+  }, [session, cacheKey, limit]);
 
   useEffect(() => {
+    if (!autoFetch) return;
     if (!session?.id_sesion) return;
-    fetchCentros().catch(() => void 0);
-  }, [session?.id_sesion, fetchCentros]);
+    fetchCentros({ offset: 0 }).catch(() => void 0);
+  }, [autoFetch, session?.id_sesion, fetchCentros]);
 
   const crearCentro = useCallback(async (centro) => {
     const endpoint = CONTABILIDAD_ENDPOINT?.CENTRO_COSTO_CREAR;
@@ -186,7 +198,7 @@ export function useCentrosCostoAdmin(session) {
       });
     }
     return res;
-  }, [session, cacheKey]);
+  }, [session, cacheKey, limit]);
 
   const editarCentro = useCallback(async (centro) => {
     const endpoint = CONTABILIDAD_ENDPOINT?.CENTRO_COSTO_EDITAR;
@@ -221,7 +233,7 @@ export function useCentrosCostoAdmin(session) {
       setRows((prev) => prev.map((x) => (x.id_centro_costo === mapped.id_centro_costo ? { ...x, ...mapped } : x)));
     }
     return res;
-  }, [session, cacheKey]);
+  }, [session, cacheKey, limit]);
 
   const apagarCentro = useCallback(async (centro) => {
     const endpoint = CONTABILIDAD_ENDPOINT?.CENTRO_COSTO_ELIMINAR;
@@ -252,7 +264,7 @@ export function useCentrosCostoAdmin(session) {
       setRows((prev) => prev.map((x) => (x.id_centro_costo === mapped.id_centro_costo ? { ...x, ...mapped } : x)));
     }
     return res;
-  }, [session, cacheKey]);
+  }, [session, cacheKey, limit]);
 
   return {
     rows,

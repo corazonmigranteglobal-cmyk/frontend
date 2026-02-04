@@ -146,12 +146,25 @@ export function useVistasPublicasAdmin(session) {
                 const base = prefix || "";
                 const baseNorm = base && !base.endsWith("/") ? `${base}/` : base;
 
+                // Para comparar con object names (GCS/S3), quitamos "/" inicial
+                const baseCompare = String(baseNorm).replace(/^\/+/, "");
+
                 const directFolders = new Set();
-                for (const p of paths) {
-                    if (!p.startsWith(baseNorm)) continue;
-                    const rest = p.slice(baseNorm.length);
+                for (const pRaw of paths) {
+                    const p = String(pRaw || "").replace(/^\/+/, "");
+                    if (!p) continue;
+
+                    // Si el backend devuelve paths absolutos: landing_page/media/...
+                    // Si devuelve paths relativos (tu caso): media/...
+                    const rest =
+                        baseCompare && p.startsWith(baseCompare)
+                            ? p.slice(baseCompare.length)
+                            : p;
+
                     const seg = rest.split("/")[0];
                     if (!seg) continue;
+
+                    // Mantener el formato del prefix original (con "/" inicial si lo tenías)
                     directFolders.add(`${baseNorm}${seg}/`);
                 }
 

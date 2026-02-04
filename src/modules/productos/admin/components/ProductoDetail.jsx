@@ -9,7 +9,7 @@ export default function ProductoDetail({ draft, setDraft, onSave, isSaving = fal
         // IMPORTANTE:
         // - No mostramos "Seleccione..." como opción visible.
         // - Si no hay categoría, seteamos una por defecto (primera del array base).
-        const base = ["TERAPIA", "WF_CAT", "Apoyo Alimentario", "Atención Médica", "Asesoría Legal", "Educación"];
+        const base = ["TERAPIA", "CURSO", "PRODUCTO"];
         const current = d?.categoria && d?.categoria !== "—" ? [d.categoria] : [];
         return Array.from(new Set([...current, ...base]));
         // eslint-disable-next-line react-hooks/exhaustive-deps

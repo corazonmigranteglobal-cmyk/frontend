@@ -19,7 +19,9 @@ export async function createApiConn(endpoint, payload = {}, method = "POST", ses
     let url = `${API_URL}${normalized}`;
 
     const headers = {
-        ...(payload instanceof FormData ? {} : { "Content-Type": "application/json; charset=utf-8" }),
+        ...(payload instanceof FormData || method.toUpperCase() === "GET"
+            ? {}
+            : { "Content-Type": "application/json; charset=utf-8" }),
         ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
     };
 

@@ -25,6 +25,9 @@ export default function PerfilForm({
   const lastUpdatedLabel = profile?.lastUpdatedLabel || "";
   const ut = normUserType(userType);
 
+  // Para habilitar el cambio de contraseña necesitamos un email.
+  const hasEmail = !!String(profile?.email || "").trim();
+
   const isTerapeuta = ut === "terapeuta";
   const isAdmin =
     ut === "admin" ||
@@ -217,6 +220,41 @@ export default function PerfilForm({
 
           </section>
         ) : null}
+
+        {/* ===================== CUENTA ===================== */}
+        <section>
+          <div className="flex items-center gap-3 mb-6">
+            <span className="material-symbols-outlined text-primary">settings</span>
+            <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+              Configuración de Cuenta
+            </h4>
+            <div className="h-[1px] flex-grow bg-gradient-to-r from-border-light to-transparent" />
+          </div>
+
+          <div className="bg-brand-cream/60 border border-border-light rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h5 className="text-sm font-bold text-slate-800">Contraseña de acceso</h5>
+              <p className="text-xs text-slate-500">
+                Actualiza tu contraseña regularmente para mayor seguridad.
+              </p>
+              {!hasEmail ? (
+                <p className="text-[11px] text-slate-500 mt-2">
+                  No se encontró un correo asociado a tu cuenta.
+                </p>
+              ) : null}
+            </div>
+
+            <button
+              className="px-6 py-2.5 bg-white border border-border-light rounded-xl text-sm font-bold text-primary hover:bg-primary/5 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              type="button"
+              onClick={() => onChangePassword?.()}
+              disabled={loading || saving || !hasEmail || !onChangePassword}
+              title={!hasEmail ? "Define tu correo para poder cambiar la contraseña" : ""}
+            >
+              Cambiar contraseña
+            </button>
+          </div>
+        </section>
 
         <div className="pt-8 border-t border-border-light flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-[11px] text-slate-500 italic flex items-center gap-2">

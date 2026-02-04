@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useCuentasAdmin } from "../hooks/useCuentasAdmin";
 import { useGruposCuentaAdmin } from "../hooks/useGruposCuentaAdmin";
 import ConfirmDeleteModal from "../components/modals/ConfirmDeleteModal";
 import MetadataKeyValueTable from "../components/MetadataKeyValueTable";
+import PaginationControls from "../components/PaginationControls";
 
 const EMPTY_FORM = {
   id_cuenta: null,
@@ -20,7 +21,13 @@ const EMPTY_FORM = {
 // metadata ahora se edita como tabla atributo-valor (ver MetadataKeyValueTable)
 
 export default function CuentaPage({ session }) {
-  const { rows, isLoading, error, fetchCuentas, crearCuenta, editarCuenta, apagarCuenta } = useCuentasAdmin(session);
+  const [pageSize, setPageSize] = useState(50);
+  const [offset, setOffset] = useState(0);
+
+  const { rows, isLoading, error, fetchCuentas, crearCuenta, editarCuenta, apagarCuenta } = useCuentasAdmin(session, {
+    autoFetch: false,
+    limit: pageSize,
+  });
   const { rows: grupos } = useGruposCuentaAdmin(session);
 
   const [query, setQuery] = useState("");
@@ -35,6 +42,11 @@ export default function CuentaPage({ session }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (!session?.id_sesion) return;
+    fetchCuentas({ offset });
+  }, [session?.id_sesion, offset, pageSize, fetchCuentas]);
 
   const filteredRows = useMemo(() => {
     let data = [...rows];
@@ -137,7 +149,7 @@ export default function CuentaPage({ session }) {
         await crearCuenta(payload);
       }
 
-      await fetchCuentas();
+      await fetchCuentas({ offset });
       startCreate();
     } catch (e) {
       console.error(e);
@@ -157,7 +169,7 @@ export default function CuentaPage({ session }) {
     setDeleting(true);
     try {
       await apagarCuenta(deleteTarget);
-      await fetchCuentas();
+      await fetchCuentas({ offset });
       if (activeId === deleteTarget.id_cuenta) startCreate();
       setDeleteOpen(false);
       setDeleteTarget(null);
@@ -221,7 +233,7 @@ export default function CuentaPage({ session }) {
               <button
                 type="button"
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-white"
-                onClick={() => fetchCuentas()}
+                onClick={() => fetchCuentas({ offset })}
                 disabled={isLoading}
               >
                 {isLoading ? "Cargando..." : "Refrescar"}
@@ -339,16 +351,29 @@ export default function CuentaPage({ session }) {
               </table>
             </div>
 
-            <div className="p-3 border-t border-gray-100 bg-gray-50/50 flex justify-between items-center text-sm">
-              <span className="text-xs text-gray-500">{filteredRows.length} registros</span>
-              <div className="flex gap-1">
+            <div className="p-3 border-t border-gray-100 bg-gray-50/50 space-y-3">
+              <PaginationControls
+                offset={offset}
+                limit={pageSize}
+                count={rows.length}
+                isLoading={isLoading}
+                onPrev={() => setOffset((o) => Math.max(0, o - pageSize))}
+                onNext={() => setOffset((o) => o + pageSize)}
+                onLimitChange={(n) => {
+                  setPageSize(n);
+                  setOffset(0);
+                }}
+              />
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <span>{filteredRows.length} registros (filtrados)</span>
                 <button
                   type="button"
-                  className="p-1 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-50"
-                  onClick={() => fetchCuentas()}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => fetchCuentas({ offset })}
                   disabled={isLoading}
                 >
                   <span className="material-icons text-sm">refresh</span>
+                  Refrescar
                 </button>
               </div>
             </div>

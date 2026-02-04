@@ -1084,7 +1084,7 @@ export default function AuthPacientePage({ onBack, onGoLogin, initialMode } = {}
             </div>
 
             <div className="mt-10 text-center text-xs text-gray-400 dark:text-gray-600">
-              <p>© 2024 Corazón de Migrante. Todos los derechos reservados.</p>
+              <p>© 2026 Corazón de Migrante. Todos los derechos reservados.</p>
               <div className="flex justify-center gap-4 mt-2">
                 <span className="hover:text-gray-600 dark:hover:text-gray-400 cursor-pointer">
                   Privacidad

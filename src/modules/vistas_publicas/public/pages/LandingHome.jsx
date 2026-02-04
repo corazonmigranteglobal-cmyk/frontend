@@ -3,6 +3,7 @@ import "../styles/landing.css";
 
 import LandingNavbar from "../components/landing/LandingNavbar";
 import ThemeToggleFab from "../components/landing/ThemeToggleFab";
+import WhatsAppFab from "../components/landing/WhatsAppFab";
 import LandingFooter from "../components/landing/LandingFooter";
 import ScrollProgress from "../components/landing/ScrollProgress";
 import PublicLoginPage from "../auth/PublicLoginPage";
@@ -112,6 +113,7 @@ if (loading && !content) {
   const sections = content?.sections || {};
   const footer = content?.footer;
   const ui = content?.ui;
+  const telefono = content?.telefono;
 
   const dev = import.meta.env.DEV;
 
@@ -154,9 +156,10 @@ if (loading && !content) {
       <MissionSection data={sections.mission} onAction={runAction} />
       <EmotionsSection data={sections.emotions} />
       <PsychologistsSection data={sections.psicologists} />
-      <CTASection data={sections.cta} onAction={runAction} />
+      <CTASection data={sections.cta} onAction={runAction} telefono={telefono} />
 
       <LandingFooter data={footer} />
+      <WhatsAppFab phone={telefono} message="Quiero agendar una cita" labels={ui?.whatsapp_fab} />
       <ThemeToggleFab labels={ui?.theme_toggle} />
     </div>
   );
