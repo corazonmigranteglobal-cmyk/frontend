@@ -404,7 +404,9 @@ export default function TransaccionPage({ session }) {
                                         <option value="AJUSTE">AJUSTE</option>
                                         <option value="EGRESO">EGRESO</option>
                                         <option value="DEPRECIACION">DEPRECIACION</option>
-                                        <option value="EGRESO">EGRESO</option>
+                                        <option value="GESTION DE ACTIVOS">GESTION DE ACTIVOS</option>
+                                        <option value="GESTION DE PASIVOS">GESTION DE PASIVOS</option>
+                                        <option value="GESTION DE PATRIMONIO">GESTION DE PATRIMONIO</option>
                                     </select>
                                 </div>
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ConfirmDeleteModal from "../components/modals/ConfirmDeleteModal";
+import ActionResultModal from "../components/modals/ActionResultModal";
 import MetadataKeyValueTable from "../components/MetadataKeyValueTable";
 import { useGruposCuentaAdmin } from "../hooks/useGruposCuentaAdmin";
 import PaginationControls from "../components/PaginationControls";
@@ -44,6 +45,18 @@ export default function GrupoCuentaPage({ session }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [resultOpen, setResultOpen] = useState(false);
+  const [resultKind, setResultKind] = useState("success");
+  const [resultTitle, setResultTitle] = useState("");
+  const [resultMessage, setResultMessage] = useState("");
+
+  const showResult = (kind, title, message) => {
+    setResultKind(kind || "success");
+    setResultTitle(title || "");
+    setResultMessage(message || "");
+    setResultOpen(true);
+  };
+
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
@@ -81,7 +94,9 @@ export default function GrupoCuentaPage({ session }) {
       codigo: row.codigo ?? "",
       nombre: row.nombre ?? "",
       tipo_grupo: row.tipo_grupo ?? "",
-      id_grupo_padre: row.id_grupo_padre ?? "",
+      // Nota: algunos listados pueden devolver 0 para "sin padre".
+      // En UI lo tratamos como raíz ("") para no mandar 0 al backend.
+      id_grupo_padre: row.id_grupo_padre ? String(row.id_grupo_padre) : "",
       metadata: row.metadata ?? {},
       register_status: row.register_status ?? "Activo",
     });
@@ -89,22 +104,27 @@ export default function GrupoCuentaPage({ session }) {
 
   const onSave = async () => {
     if (!session?.id_sesion) {
-      alert("Sesión inválida: falta id_sesion");
+      showResult("error", "Sesión inválida", "Falta id_sesion. Vuelve a iniciar sesión.");
       return;
     }
     if (!form.nombre) {
-      alert("El Nombre es obligatorio");
+      showResult("error", "Campos obligatorios", "El Nombre es obligatorio.");
       return;
     }
 
     setSaving(true);
     try {
+      const rawPadre = form.id_grupo_padre;
+      const padreNum = rawPadre === "" || rawPadre == null ? null : Number(rawPadre);
+      const padreId = !padreNum || Number.isNaN(padreNum) ? null : padreNum;
+
       const payload = {
         id_grupo_cuenta: form.id_grupo_cuenta,
         codigo: form.codigo,
         nombre: form.nombre,
         tipo_grupo: form.tipo_grupo,
-        id_grupo_padre: form.id_grupo_padre === "" ? null : Number(form.id_grupo_padre),
+        // Importante: backend valida existencia de padre; no mandar 0.
+        id_grupo_padre: padreId,
         register_status: form.register_status,
         metadata: form.id_grupo_cuenta
           ? (metadataTouched ? (form.metadata ?? {}) : undefined)
@@ -120,9 +140,10 @@ export default function GrupoCuentaPage({ session }) {
       setOffset(0);
       await fetchGrupos({ offset: 0 });
       startCreate();
+      showResult("success", "Listo", "Grupo guardado correctamente.");
     } catch (e) {
       console.error(e);
-      alert(e?.message || "Error al guardar");
+      showResult("error", "Error al guardar", e?.message || "No se pudo guardar el grupo.");
     } finally {
       setSaving(false);
     }
@@ -143,9 +164,10 @@ export default function GrupoCuentaPage({ session }) {
       if (activeId === deleteTarget.id_grupo_cuenta) startCreate();
       setDeleteOpen(false);
       setDeleteTarget(null);
+      showResult("success", "Listo", "Grupo eliminado correctamente.");
     } catch (e) {
       console.error(e);
-      alert(e?.message || "Error al eliminar");
+      showResult("error", "Error al eliminar", e?.message || "No se pudo eliminar el grupo.");
     } finally {
       setDeleting(false);
     }
@@ -472,6 +494,14 @@ export default function GrupoCuentaPage({ session }) {
           setDeleteOpen(false);
           setDeleteTarget(null);
         }}
+      />
+
+      <ActionResultModal
+        open={resultOpen}
+        kind={resultKind}
+        title={resultTitle}
+        message={resultMessage}
+        onClose={() => setResultOpen(false)}
       />
     </main>
   );
