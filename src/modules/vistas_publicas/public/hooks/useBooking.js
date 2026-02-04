@@ -138,6 +138,12 @@ export function useBooking() {
         try {
             const authParams = getAuthParams();
 
+            // Combine date and time to create full timestamps
+            // Assuming fecha is YYYY-MM-DD and hora is HH:MM
+            // We construct it in local time then convert to ISO
+            const inicioDate = new Date(`${fecha}T${horaInicio}:00`);
+            const finDate = new Date(`${fecha}T${horaFin}:00`);
+
             const payload = {
                 args: {
                     ...authParams,
@@ -145,8 +151,8 @@ export function useBooking() {
                     p_id_usuario_paciente: authParams.p_actor_user_id,
                     p_id_producto: idProducto,
                     p_fecha: fecha,
-                    p_inicio: horaInicio,
-                    p_fin: horaFin,
+                    p_inicio: inicioDate.toISOString(),
+                    p_fin: finDate.toISOString(),
                     p_notas: notas,
                 },
             };
