@@ -392,7 +392,7 @@ export default function TransaccionPage({ session }) {
 
                                 <div className="md:col-span-8">
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        Tipo de Documento
+                                        Tipo de transaccion <span className="text-primary">*</span>
                                     </label>
                                     <select
                                         value={draft.tipo_transaccion}
@@ -400,10 +400,11 @@ export default function TransaccionPage({ session }) {
                                         className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
                                     >
                                         <option value="">- Seleccionar -</option>
-                                        <option value="VENTA">Factura de Venta (VENTA)</option>
-                                        <option value="AJUSTE">Nota de Contabilidad (AJUSTE)</option>
-                                        <option value="EGRESO">Comprobante de Egreso (EGRESO)</option>
-                                        <option value="INGRESO">Recibo de Caja (INGRESO)</option>
+                                        <option value="INGRESO">INGRESO</option>
+                                        <option value="AJUSTE">AJUSTE</option>
+                                        <option value="EGRESO">EGRESO</option>
+                                        <option value="DEPRECIACION">DEPRECIACION</option>
+                                        <option value="EGRESO">EGRESO</option>
                                     </select>
                                 </div>
 

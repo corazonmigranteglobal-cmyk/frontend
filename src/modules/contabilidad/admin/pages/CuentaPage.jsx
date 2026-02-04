@@ -67,19 +67,19 @@ export default function CuentaPage({ session }) {
   }, [rows, query, filter]);
 
   const tipoCuentaOptions = useMemo(() => {
-    const set = new Set(["ACTIVO", "PASIVO", "PATRIMONIO", "INGRESO", "GASTO", "BALANCE", "RESULTADO"]);
+    const set = new Set(["BALANCE GENERAL", "ESTADO DE RESULTADOS"]);
     for (const r of rows) if (r.tipo_cuenta) set.add(String(r.tipo_cuenta));
     return Array.from(set);
   }, [rows]);
 
   const subTipoOptions = useMemo(() => {
-    const set = new Set(["EFECTIVO", "BANCOS", "CUENTAS_POR_COBRAR", "CUENTAS_POR_PAGAR", "INGRESOS", "GASTOS"]);
+    const set = new Set(["ACTIVO", "PASIVO", "PATRIMONIO", "INGRESOS", "GASTOS"]);
     for (const r of rows) if (r.sub_tipo) set.add(String(r.sub_tipo));
     return Array.from(set);
   }, [rows]);
 
   const categoriaOptions = useMemo(() => {
-    const set = new Set(["CORRIENTE", "NO_CORRIENTE", "OPERATIVO", "FINANCIERO"]);
+    const set = new Set(["CORRIENTE", "NO_CORRIENTE", "ORDINARIO", "NO_ORDINARIO"]);
     for (const r of rows) if (r.categoria) set.add(String(r.categoria));
     return Array.from(set);
   }, [rows]);

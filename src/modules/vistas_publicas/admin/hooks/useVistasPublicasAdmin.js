@@ -15,6 +15,86 @@ function formatBytes(bytes) {
     return `${gb.toFixed(1)} GB`;
 }
 
+/* =========================
+   File index helpers
+   (Backend returns a FLAT list of objectName/path)
+   Goal: build folders/files client-side and minimize calls.
+========================= */
+
+function normalizePrefix(prefix) {
+    const p = String(prefix || "").trim().replace(/^\/+/, "");
+    if (!p) return "";
+    return p.endsWith("/") ? p : `${p}/`;
+}
+
+function normalizeObjectPath(p) {
+    // Keep it conservative: only normalize slashes and trim.
+    // Do NOT try to strip bucket names here, because backend already returns clean object names.
+    return String(p || "").trim().replace(/^\/+/, "");
+}
+
+function deriveDirsAndFilesFromFlatItems(items, currentPrefix) {
+    const prefixNorm = normalizePrefix(currentPrefix);
+    const dirs = new Map();
+    const files = [];
+
+    for (const it of items) {
+        const rawPath = it?.path || it?.objectName || "";
+        const p = normalizeObjectPath(rawPath);
+        if (!p) continue;
+
+        // Only items under current prefix
+        if (prefixNorm && !p.startsWith(prefixNorm)) continue;
+
+        const rest = prefixNorm ? p.slice(prefixNorm.length) : p;
+        if (!rest) continue;
+
+        // Folder markers always contain a slash (e.g. "admin_portal/")
+        const hasSlash = rest.includes("/");
+
+        if (hasSlash) {
+            // Direct child folder is the first segment
+            const seg = rest.split("/")[0];
+            if (!seg) continue;
+            const folderPath = `${prefixNorm}${seg}/`;
+            if (!dirs.has(folderPath)) {
+                dirs.set(folderPath, {
+                    id: folderPath,
+                    path: folderPath,
+                    name: seg,
+                });
+            }
+            continue;
+        }
+
+        // Direct file in current folder
+        if (p.endsWith("/")) {
+            // Edge-case: folder marker without nested segment (rare)
+            const seg = rest.replace(/\/+$/, "");
+            if (!seg) continue;
+            const folderPath = `${prefixNorm}${seg}/`;
+            if (!dirs.has(folderPath)) {
+                dirs.set(folderPath, { id: folderPath, path: folderPath, name: seg });
+            }
+            continue;
+        }
+
+        const name = rest;
+        files.push({
+            id: p,
+            path: p,
+            name,
+            size: formatBytes(it?.size),
+            raw: it,
+        });
+    }
+
+    return {
+        dirs: Array.from(dirs.values()).sort((a, b) => a.name.localeCompare(b.name)),
+        files: files.sort((a, b) => a.name.localeCompare(b.name)),
+    };
+}
+
 export function useVistasPublicasAdmin(session) {
     // ---------------- FORM (panel editor)
     const [selectedView, setSelectedView] = useState("Vista externa");
@@ -43,13 +123,12 @@ export function useVistasPublicasAdmin(session) {
 
     // ---------------- FILES (explorador de carpetas)
     const [filesPrefix, setFilesPrefix] = useState("");
-    const [serverDirs, setServerDirs] = useState([]);
+    const [filesIndexItems, setFilesIndexItems] = useState([]); // flat list from backend
     const [selectedUploadDir, setSelectedUploadDir] = useState("");
     const [filesLoading, setFilesLoading] = useState(false);
     const [filesError, setFilesError] = useState("");
 
     // ---------------- FILES (tabla de archivos: descargar / eliminar)
-    const [serverFiles, setServerFiles] = useState([]);
     const [isDeletingFile, setIsDeletingFile] = useState(false);
     const [isDownloadingFile, setIsDownloadingFile] = useState(false);
 
@@ -122,122 +201,36 @@ export function useVistasPublicasAdmin(session) {
         setFile(null);
     }, []);
 
-    // ---------------- FILES: LIST DIRECTORIOS
-    const listDirs = useCallback(
-        async ({ prefix = filesPrefix } = {}) => {
-            if (!session) return;
+    // ---------------- FILES: SINGLE CALL (flat index)
+    const refreshFilesIndex = useCallback(async () => {
+        if (!session) return;
+        setFilesLoading(true);
+        setFilesError("");
+        try {
+            // IMPORTANT: backend already returns a FLAT list of ALL objects.
+            // We keep only ONE call and build hierarchy client-side.
+            const payload = { storage: FILE_SERVER_NAME };
+            const res = await createApiConn(UI_ENDPOINTS.FILES_LIST, payload, "GET", session);
+            const items = Array.isArray(res?.items) ? res.items : [];
+            setFilesIndexItems(items);
+        } catch (err) {
+            console.error("[FILES_LIST] error (index):", err);
+            setFilesIndexItems([]);
+            setFilesError("No se pudo cargar la estructura de archivos.");
+        } finally {
+            setFilesLoading(false);
+        }
+    }, [session]);
 
-            setFilesLoading(true);
-            setFilesError("");
+    // Derived folders/files for the current prefix
+    const { dirs: serverDirs, files: serverFiles } = useMemo(() => {
+        const items = Array.isArray(filesIndexItems) ? filesIndexItems : [];
+        return deriveDirsAndFilesFromFlatItems(items, filesPrefix);
+    }, [filesIndexItems, filesPrefix]);
 
-            try {
-                const payload = {
-                    storage: FILE_SERVER_NAME,
-                    ...(prefix ? { prefix } : {}),
-                };
-                const res = await createApiConn(UI_ENDPOINTS.FILES_LIST, payload, "GET", session);
-
-                const items = Array.isArray(res?.items) ? res.items : [];
-
-                const paths = items
-                    .map((it) => it.path || it.objectName || "")
-                    .filter(Boolean);
-
-                const base = prefix || "";
-                const baseNorm = base && !base.endsWith("/") ? `${base}/` : base;
-
-                // Para comparar con object names (GCS/S3), quitamos "/" inicial
-                const baseCompare = String(baseNorm).replace(/^\/+/, "");
-
-                const directFolders = new Set();
-                for (const pRaw of paths) {
-                    const p = String(pRaw || "").replace(/^\/+/, "");
-                    if (!p) continue;
-
-                    // Si el backend devuelve paths absolutos: landing_page/media/...
-                    // Si devuelve paths relativos (tu caso): media/...
-                    const rest =
-                        baseCompare && p.startsWith(baseCompare)
-                            ? p.slice(baseCompare.length)
-                            : p;
-
-                    const seg = rest.split("/")[0];
-                    if (!seg) continue;
-
-                    // Mantener el formato del prefix original (con "/" inicial si lo tenías)
-                    directFolders.add(`${baseNorm}${seg}/`);
-                }
-
-                const mapped = Array.from(directFolders)
-                    .sort((a, b) => a.localeCompare(b))
-                    .map((folderPath) => {
-                        const name = folderPath
-                            .replace(baseNorm, "")
-                            .replace(/\/$/, "")
-                            .split("/")
-                            .pop();
-                        return {
-                            id: folderPath,
-                            path: folderPath,
-                            name: name || folderPath,
-                        };
-                    });
-
-                setServerDirs(mapped);
-            } catch (err) {
-                console.error("[FILES_LIST] error:", err);
-                setServerDirs([]);
-                setFilesError("No se pudo cargar la estructura de carpetas.");
-            } finally {
-                setFilesLoading(false);
-            }
-        },
-        [session, filesPrefix]
-    );
-
-    // ---------------- FILES: LIST ARCHIVOS (para la tabla: descargar / eliminar)
-    const listFiles = useCallback(
-        async ({ prefix = filesPrefix } = {}) => {
-            if (!session) return;
-
-            setFilesLoading(true);
-            setFilesError("");
-
-            try {
-                const payload = {
-                    storage: FILE_SERVER_NAME,
-                    ...(prefix ? { prefix } : {}),
-                };
-
-                const res = await createApiConn(UI_ENDPOINTS.FILES_LIST, payload, "GET", session);
-                const items = Array.isArray(res?.items) ? res.items : [];
-
-                const mapped = items
-                    .map((it) => {
-                        const path = it.path || it.objectName || "";
-                        if (!path || path.endsWith("/")) return null;
-                        const name = path.split("/").pop() || path;
-                        return {
-                            id: path,
-                            path,
-                            name,
-                            size: formatBytes(it.size),
-                            raw: it,
-                        };
-                    })
-                    .filter(Boolean);
-
-                setServerFiles(mapped);
-            } catch (err) {
-                console.error("[FILES_LIST] error (files):", err);
-                setServerFiles([]);
-                setFilesError("No se pudo cargar la lista de archivos.");
-            } finally {
-                setFilesLoading(false);
-            }
-        },
-        [session, filesPrefix]
-    );
+    // Backwards-compatible aliases (some components call listDirs/listFiles)
+    const listDirs = useCallback(async () => refreshFilesIndex(), [refreshFilesIndex]);
+    const listFiles = useCallback(async () => refreshFilesIndex(), [refreshFilesIndex]);
 
     const downloadFile = useCallback(
         async (fileRow) => {
@@ -247,10 +240,10 @@ export function useVistasPublicasAdmin(session) {
 
             setIsDownloadingFile(true);
             try {
-                const qs = new URLSearchParams({
-                    storage: FILE_SERVER_NAME,
-                    path: targetPath,
-                }).toString();
+                // Avoid "+" for spaces: some backends don't translate "+" back to space.
+                const qs =
+                    `storage=${encodeURIComponent(FILE_SERVER_NAME)}` +
+                    `&path=${encodeURIComponent(targetPath)}`;
 
                 const url = `${API_URL}/${UI_ENDPOINTS.FILES_DOWNLOAD}?${qs}`;
 
@@ -292,31 +285,28 @@ export function useVistasPublicasAdmin(session) {
             try {
                 const payload = { storage: FILE_SERVER_NAME, targetPath: p };
                 await createApiConn(UI_ENDPOINTS.FILES_DELETE, payload, "DELETE", session);
-                await listFiles({ prefix: filesPrefix });
+                await refreshFilesIndex();
             } finally {
                 setIsDeletingFile(false);
             }
         },
-        [session, filesPrefix, listFiles]
+        [session, refreshFilesIndex]
     );
 
     // Navegación
     const openDir = useCallback(
         async (dirPath) => {
-            const next = String(dirPath || "");
+            const next = normalizePrefix(dirPath);
             setFilesPrefix(next);
-            await listDirs({ prefix: next });
-            await listFiles({ prefix: next });
         },
-        [listDirs, listFiles]
+        []
     );
 
     const goUpDir = useCallback(
         async () => {
-            const cur = String(filesPrefix || "");
+            const cur = normalizePrefix(filesPrefix);
             if (!cur) {
-                await listDirs({ prefix: "" });
-                await listFiles({ prefix: "" });
+                setFilesPrefix("");
                 return;
             }
             const trimmed = cur.endsWith("/") ? cur.slice(0, -1) : cur;
@@ -324,10 +314,8 @@ export function useVistasPublicasAdmin(session) {
             parts.pop();
             const parent = parts.length ? `${parts.join("/")}/` : "";
             setFilesPrefix(parent);
-            await listDirs({ prefix: parent });
-            await listFiles({ prefix: parent });
         },
-        [filesPrefix, listDirs, listFiles]
+        [filesPrefix]
     );
 
     const selectUploadDir = useCallback((dirPath) => {
@@ -414,8 +402,7 @@ export function useVistasPublicasAdmin(session) {
 
             // refresh
             await listUiComponents({ limit: uiLimit, offset: uiOffset });
-            await listDirs({ prefix: filesPrefix });
-            await listFiles({ prefix: filesPrefix });
+            await refreshFilesIndex();
             stopEditUiElement();
 
             return res; // ✅ retorna el JSON real (para tu SuccessModal)
@@ -445,8 +432,7 @@ export function useVistasPublicasAdmin(session) {
     // ---------------- INIT
     useEffect(() => {
         if (!session) return;
-        listDirs({ prefix: "" });
-        listFiles({ prefix: "" });
+        refreshFilesIndex();
         listUiComponents({ limit: uiLimit, offset: 0 });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [session]);
