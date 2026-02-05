@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useBooking } from "../hooks/useBooking";
 
 /**
@@ -10,7 +10,9 @@ import { useBooking } from "../hooks/useBooking";
  * 3. Selección de fecha/hora
  * 4. Confirmación
  */
-export default function BookingPage({ overridePacienteId = null, returnTo = "/paciente/dashboard" } = {}) {
+export default function BookingPage({ overridePacienteId = null, returnTo = null } = {}) {
+    const navigate = useNavigate();
+
     const {
         loading,
         error,
@@ -20,6 +22,22 @@ export default function BookingPage({ overridePacienteId = null, returnTo = "/pa
         getDisponibilidad,
         registrarCita,
     } = useBooking({ overridePacienteId });
+
+    // ✅ Autodetecta returnTo cuando estás en admin y no te lo pasaron
+    const effectiveReturnTo = useMemo(() => {
+        if (returnTo) return returnTo;
+
+        const p = typeof window !== "undefined" ? String(window.location?.pathname || "") : "";
+        const isAdminPath = p.startsWith("/admin") || p.startsWith("/portal-admin");
+
+        // Si estás creando cita para otro paciente, esto es modo admin
+        if (overridePacienteId != null && isAdminPath) {
+            const bp = p.startsWith("/portal-admin") ? "/portal-admin" : "/admin";
+            return `${bp}/solicitudes`;
+        }
+
+        return "/paciente/dashboard";
+    }, [returnTo, overridePacienteId]);
 
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
@@ -125,13 +143,15 @@ export default function BookingPage({ overridePacienteId = null, returnTo = "/pa
                         </p>
                     </div>
 
-                    <Link
-                        to={returnTo}
+                    {/* ✅ Navegación segura */}
+                    <button
+                        type="button"
+                        onClick={() => navigate(effectiveReturnTo, { replace: true })}
                         className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition-colors"
                     >
                         <span className="material-symbols-outlined">home</span>
                         Ir al Dashboard
-                    </Link>
+                    </button>
                 </div>
             </div>
         );
@@ -144,7 +164,7 @@ export default function BookingPage({ overridePacienteId = null, returnTo = "/pa
                 <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
                         <Link
-                            to={returnTo}
+                            to={effectiveReturnTo}
                             className="flex items-center gap-2 text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition-colors"
                         >
                             <span className="material-symbols-outlined">arrow_back</span>

@@ -1,30 +1,107 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSession } from "../../../../app/auth/SessionContext";
 import { useBooking } from "../hooks/useBooking";
+import { useSolicitudesCitaPaciente } from "../hooks/useSolicitudesCitaPaciente";
 
 /**
  * Dashboard del paciente autenticado
  * - Muestra información básica del usuario
- * - Lista de citas próximas
+ * - Lista de solicitudes/citas (tabla)
  * - Acceso rápido a agendar nueva cita
  */
 export default function PacienteDashboard() {
     const navigate = useNavigate();
     const { session, logout } = useSession();
-    const { bootstrapData, loading, error, getBookingBootstrap } = useBooking();
+    const { bootstrapData, loading: loadingBootstrap, error: errorBootstrap, getBookingBootstrap } = useBooking();
 
-    const [citas, setCitas] = useState([]);
+    // Tabla de solicitudes/citas
+    const [pageSize, setPageSize] = useState(10);
+    const [offset, setOffset] = useState(0);
+
+    // Filtro de estado
+    const [estadoFilter, setEstadoFilter] = useState("TODOS");
+
+    const {
+        rows: solicitudes,
+        isLoading: loadingSolicitudes,
+        error: errorSolicitudes,
+        fetchSolicitudes,
+    } = useSolicitudesCitaPaciente({ autoFetch: false, limit: pageSize, offset });
 
     useEffect(() => {
-        // Cargar datos iniciales al montar
+        // Cargar datos iniciales (booking bootstrap) al montar
         getBookingBootstrap(false).catch(console.error);
-    }, []);
+    }, [getBookingBootstrap]);
+
+    useEffect(() => {
+        if (!session?.user_id || !session?.id_sesion) return;
+        fetchSolicitudes({
+            p_limit: pageSize,
+            p_offset: offset,
+            p_id_usuario_paciente: session.user_id,
+        }).catch(() => { });
+    }, [session?.user_id, session?.id_sesion, pageSize, offset, fetchSolicitudes]);
 
     const handleLogout = () => {
         logout();
         navigate("/paciente/login");
     };
+
+    const canPrev = offset > 0;
+    const canNext = (solicitudes?.length || 0) >= pageSize;
+
+    const fmtFecha = (iso) => {
+        const s = (iso ?? "").toString();
+        const ymd = s.slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "-";
+        const [y, m, d] = ymd.split("-");
+        return `${d}/${m}/${y}`;
+    };
+
+    const fmtHora = (iso) => {
+        const s = (iso ?? "").toString();
+        const hhmm = s.slice(11, 16);
+        return /^\d{2}:\d{2}$/.test(hhmm) ? hhmm : "-";
+    };
+
+    const estadoBadge = (estado) => {
+        const e = (estado || "").toString().toUpperCase();
+        if (e === "CONFIRMADA") return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300";
+        if (e === "REALIZADA") return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300";
+        if (e === "CANCELADA") return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300";
+        if (e === "REPROGRAMADA") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
+        return "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200";
+    };
+
+    const normalizeEstado = (v) => (v ?? "").toString().trim().toUpperCase() || "PENDIENTE";
+
+    const getSortTs = (r) => {
+        const a = r?.created_at || r?.inicio || r?.fecha_programada || null;
+        const t = a ? new Date(a).getTime() : 0;
+        return Number.isFinite(t) ? t : 0;
+    };
+
+    const solicitudesOrdenadasFiltradas = useMemo(() => {
+        const list = Array.isArray(solicitudes) ? [...solicitudes] : [];
+
+        // Orden: más reciente -> más antiguo
+        list.sort((a, b) => getSortTs(b) - getSortTs(a));
+
+        // Filtro por estado (si aplica)
+        const f = normalizeEstado(estadoFilter);
+        if (f !== "TODOS") {
+            return list.filter((r) => normalizeEstado(r?.estado) === f);
+        }
+        return list;
+    }, [solicitudes, estadoFilter]);
+
+    const totalProximas = useMemo(() => {
+        // “Próximas” en el dashboard: solicitudes activas (no apagadas) y con fecha
+        return (solicitudesOrdenadasFiltradas || []).filter((r) => (r?.register_status || "Activo") === "Activo").length;
+    }, [solicitudesOrdenadasFiltradas]);
+
+    const error = errorSolicitudes || errorBootstrap;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-gray-900 dark:via-gray-950 dark:to-black font-display">
@@ -85,8 +162,8 @@ export default function PacienteDashboard() {
                                 <span className="material-symbols-outlined text-blue-600 dark:text-blue-400">event</span>
                             </div>
                             <div>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">Próximas Citas</p>
-                                <p className="text-xl font-bold text-slate-800 dark:text-white">{citas.length}</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">Historial de citas</p>
+                                <p className="text-xl font-bold text-slate-800 dark:text-white">{totalProximas}</p>
                             </div>
                         </div>
                     </div>
@@ -145,7 +222,9 @@ export default function PacienteDashboard() {
                                     Elige un terapeuta, fecha y horario disponible para tu próxima sesión.
                                 </p>
                             </div>
-                            <span className="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">arrow_forward</span>
+                            <span className="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">
+                                arrow_forward
+                            </span>
                         </div>
                     </Link>
 
@@ -157,9 +236,7 @@ export default function PacienteDashboard() {
                             </div>
                             <div className="flex-1">
                                 <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-1">Mis Citas</h3>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                    Revisa y gestiona tus citas programadas.
-                                </p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">Revisa y gestiona tus citas programadas.</p>
                                 <span className="inline-block mt-2 text-xs font-medium text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">
                                     Próximamente
                                 </span>
@@ -170,38 +247,162 @@ export default function PacienteDashboard() {
 
                 {/* Citas Section */}
                 <div className="rounded-2xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-sm overflow-hidden">
-                    <div className="px-6 py-4 border-b border-black/5 dark:border-white/10">
+                    <div className="px-6 py-4 border-b border-black/5 dark:border-white/10 flex items-center justify-between gap-4">
                         <h2 className="font-bold text-lg text-slate-800 dark:text-white">Próximas Citas</h2>
+
+                        <div className="flex items-center gap-2">
+                            {/* Filtro estado */}
+                            <select
+                                value={estadoFilter}
+                                onChange={(e) => {
+                                    setOffset(0);
+                                    setEstadoFilter(e.target.value);
+                                }}
+                                className="text-sm rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 text-slate-700 dark:text-slate-200 px-2 py-1.5"
+                                aria-label="Filtro por estado"
+                            >
+                                <option value="TODOS">Todos</option>
+                                <option value="PENDIENTE">Pendiente</option>
+                                <option value="CONFIRMADA">Confirmada</option>
+                                <option value="REALIZADA">Realizada</option>
+                                <option value="CANCELADA">Cancelada</option>
+                                <option value="REPROGRAMADA">Reprogramada</option>
+                            </select>
+
+                            {/* Page size */}
+                            <select
+                                value={pageSize}
+                                onChange={(e) => {
+                                    const n = parseInt(e.target.value, 10);
+                                    setOffset(0);
+                                    setPageSize(Number.isFinite(n) ? n : 10);
+                                }}
+                                className="text-sm rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 text-slate-700 dark:text-slate-200 px-2 py-1.5"
+                                aria-label="Tamaño de página"
+                            >
+                                {[5, 10, 20, 50].map((n) => (
+                                    <option key={n} value={n}>
+                                        {n}/pág
+                                    </option>
+                                ))}
+                            </select>
+
+                            <button
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/10 disabled:opacity-50"
+                                onClick={() => setOffset((v) => Math.max(0, v - pageSize))}
+                                disabled={!canPrev || loadingSolicitudes}
+                                title="Anterior"
+                            >
+                                <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                                Ant.
+                            </button>
+
+                            <button
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/10 disabled:opacity-50"
+                                onClick={() => setOffset((v) => v + pageSize)}
+                                disabled={!canNext || loadingSolicitudes}
+                                title="Siguiente"
+                            >
+                                Sig.
+                                <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                            </button>
+                        </div>
                     </div>
 
                     <div className="p-6">
-                        {loading ? (
+                        {loadingSolicitudes || loadingBootstrap ? (
                             <div className="flex items-center justify-center py-12">
                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                             </div>
-                        ) : citas.length > 0 ? (
-                            <div className="space-y-4">
-                                {citas.map((cita, idx) => (
-                                    <div key={idx} className="flex items-center gap-4 p-4 rounded-xl bg-slate-50 dark:bg-white/5">
-                                        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                                            <span className="material-symbols-outlined text-primary">event</span>
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className="font-semibold text-slate-800 dark:text-white">{cita.fecha}</p>
-                                            <p className="text-sm text-slate-500">{cita.hora_inicio} - {cita.hora_fin}</p>
-                                        </div>
-                                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                                            {cita.estado || "PENDIENTE"}
-                                        </span>
-                                    </div>
-                                ))}
+                        ) : (solicitudesOrdenadasFiltradas?.length || 0) > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm">
+                                    <thead>
+                                        <tr className="text-left text-slate-500 dark:text-slate-400">
+                                            <th className="py-3 pr-4 font-semibold">Fecha</th>
+                                            <th className="py-3 pr-4 font-semibold">Horario</th>
+                                            <th className="py-3 pr-4 font-semibold">Estado</th>
+                                            <th className="py-3 pr-4 font-semibold">Terapeuta</th>
+                                            <th className="py-3 pr-4 font-semibold">Enfoque</th>
+                                            <th className="py-3 pr-4 font-semibold">Producto</th>
+                                            <th className="py-3 pr-2 font-semibold">Detalles</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-black/5 dark:divide-white/10">
+                                        {solicitudesOrdenadasFiltradas.map((r) => (
+                                            <tr key={r.id_cita} className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors">
+                                                <td className="py-3 pr-4 whitespace-nowrap text-slate-800 dark:text-white">
+                                                    {fmtFecha(r.fecha_programada)}
+                                                </td>
+                                                <td className="py-3 pr-4 whitespace-nowrap text-slate-700 dark:text-slate-200">
+                                                    {fmtHora(r.inicio)} - {fmtHora(r.fin)}
+                                                </td>
+                                                <td className="py-3 pr-4 whitespace-nowrap">
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${estadoBadge(r.estado)}`}>
+                                                        {normalizeEstado(r.estado)}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 pr-4 whitespace-nowrap text-slate-700 dark:text-slate-200">
+                                                    {r.terapeuta_nombre_completo || "-"}
+                                                </td>
+                                                <td className="py-3 pr-4 whitespace-nowrap text-slate-700 dark:text-slate-200">
+                                                    {r.enfoque_nombre || "-"}
+                                                </td>
+                                                <td className="py-3 pr-4 whitespace-nowrap text-slate-700 dark:text-slate-200">
+                                                    {r.producto_nombre || "-"}
+                                                </td>
+                                                <td className="py-3 pr-2 text-slate-600 dark:text-slate-300">
+                                                    <div className="flex flex-col gap-1">
+                                                        {r.canal ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="material-symbols-outlined text-[18px] text-slate-400">
+                                                                    wifi_calling_3
+                                                                </span>
+                                                                <span className="truncate max-w-[22rem]">{r.canal}</span>
+                                                            </div>
+                                                        ) : null}
+
+                                                        {r.enlace_sesion ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="material-symbols-outlined text-[18px] text-slate-400">link</span>
+                                                                <a
+                                                                    href={r.enlace_sesion}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="text-primary hover:underline truncate max-w-[22rem]"
+                                                                >
+                                                                    Enlace de sesión
+                                                                </a>
+                                                            </div>
+                                                        ) : null}
+
+                                                        {r.direccion ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="material-symbols-outlined text-[18px] text-slate-400">location_on</span>
+                                                                <span className="truncate max-w-[22rem]">{r.direccion}</span>
+                                                            </div>
+                                                        ) : null}
+
+                                                        {!r.canal && !r.enlace_sesion && !r.direccion ? (
+                                                            <span className="text-slate-400">—</span>
+                                                        ) : null}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         ) : (
                             <div className="text-center py-12">
                                 <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
                                     <span className="material-symbols-outlined text-slate-400 text-3xl">event_busy</span>
                                 </div>
-                                <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">No tienes citas programadas</h3>
+                                <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                                    {normalizeEstado(estadoFilter) === "TODOS"
+                                        ? "No tienes citas programadas"
+                                        : `No hay citas en estado ${normalizeEstado(estadoFilter)}`}
+                                </h3>
                                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
                                     Agenda tu primera cita para comenzar tu proceso terapéutico.
                                 </p>
@@ -228,9 +429,7 @@ export default function PacienteDashboard() {
             {/* Footer */}
             <footer className="border-t border-black/5 dark:border-white/10 mt-12">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <p className="text-center text-xs text-slate-400 dark:text-slate-600">
-                        © 2026 Corazón de Migrante. Todos los derechos reservados.
-                    </p>
+                    <p className="text-center text-xs text-slate-400 dark:text-slate-600">© 2026 Corazón de Migrante. Todos los derechos reservados.</p>
                 </div>
             </footer>
         </div>

@@ -219,6 +219,14 @@ export function useMiPerfil(session) {
 
         // admin extras (si aplica)
         id_usuario_terapeuta: safeStr(specificData?.id_usuario_terapeuta || specificData?.user_id_terapeuta || ""),
+        // (opcional) nombre del terapeuta asignado si backend lo incluye
+        terapeuta_nombre_completo: safeStr(
+          specificData?.terapeuta_nombre_completo ||
+            specificData?.nombre_terapeuta_completo ||
+            specificData?.terapeuta_nombre ||
+            specificData?.terapeuta_fullname ||
+            ""
+        ),
         is_super_admin: !!(specificData?.is_super_admin ?? userData?.is_super_admin),
         can_manage_files: !!(specificData?.can_manage_files ?? userData?.can_manage_files),
         is_accounter: !!(specificData?.is_accounter ?? userData?.is_accounter),
@@ -266,6 +274,8 @@ export function useMiPerfil(session) {
         let rows = [];
         if (res && Array.isArray(res.rows)) rows = res.rows;
         else if (Array.isArray(res.data)) rows = res.data;
+        else if (Array.isArray(res.items)) rows = res.items;
+        else if (Array.isArray(res.terapeutas)) rows = res.terapeutas;
         else if (Array.isArray(res)) rows = res;
 
         if (!mounted) return;

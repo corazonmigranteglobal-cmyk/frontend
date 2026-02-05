@@ -28,8 +28,8 @@ function normalizePrefix(prefix) {
 }
 
 function normalizeObjectPath(p) {
-    // Keep it conservative: only normalize slashes and trim.
-    // Do NOT try to strip bucket names here, because backend already returns clean object names.
+    // Conservative: normalize slashes and trim.
+    // Backend already returns clean object names.
     return String(p || "").trim().replace(/^\/+/, "");
 }
 
@@ -49,7 +49,6 @@ function deriveDirsAndFilesFromFlatItems(items, currentPrefix) {
         const rest = prefixNorm ? p.slice(prefixNorm.length) : p;
         if (!rest) continue;
 
-        // Folder markers always contain a slash (e.g. "admin_portal/")
         const hasSlash = rest.includes("/");
 
         if (hasSlash) {
@@ -85,7 +84,7 @@ function deriveDirsAndFilesFromFlatItems(items, currentPrefix) {
             path: p,
             name,
             size: formatBytes(it?.size),
-            raw: it,
+            raw: it, // ✅ importante: aquí viene el path real del backend
         });
     }
 
@@ -232,15 +231,51 @@ export function useVistasPublicasAdmin(session) {
     const listDirs = useCallback(async () => refreshFilesIndex(), [refreshFilesIndex]);
     const listFiles = useCallback(async () => refreshFilesIndex(), [refreshFilesIndex]);
 
+    // ✅ HARDENED: resolve correct object path even if UI passes a "mutated" row
+    const resolveTargetPath = useCallback(
+        (fileRow) => {
+            // 1) Ideal: exact raw from backend
+            const raw = fileRow?.raw;
+            const direct = raw?.path || raw?.objectName;
+            if (direct) return String(direct);
+
+            // 2) If UI passed a fabricated object (no raw), we resolve from the true index
+            const name = String(fileRow?.name || "").trim();
+            if (!name) return "";
+
+            const cur = normalizePrefix(filesPrefix);
+
+            const hit = (filesIndexItems || []).find((it) => {
+                const p = normalizeObjectPath(it?.path || it?.objectName || "");
+                if (!p) return false;
+                if (p.endsWith("/")) return false; // skip folder markers
+                if (cur && !p.startsWith(cur)) return false;
+                const rest = cur ? p.slice(cur.length) : p;
+                return rest === name;
+            });
+
+            if (hit?.path || hit?.objectName) return String(hit.path || hit.objectName);
+
+            // 3) Last fallback: accept only if it already looks "absolute" inside bucket
+            // (avoid joining with current prefix here, because that's the bug)
+            const candidate = String(fileRow?.path || fileRow?.id || "").trim();
+            if (candidate && !candidate.endsWith("/")) return candidate;
+
+            return "";
+        },
+        [filesPrefix, filesIndexItems]
+    );
+
     const downloadFile = useCallback(
         async (fileRow) => {
             if (!session) return;
-            const targetPath = String(fileRow?.path || "");
+
+            const targetPath = resolveTargetPath(fileRow);
             if (!targetPath) return;
 
             setIsDownloadingFile(true);
             try {
-                // Avoid "+" for spaces: some backends don't translate "+" back to space.
+                // Encode safely
                 const qs =
                     `storage=${encodeURIComponent(FILE_SERVER_NAME)}` +
                     `&path=${encodeURIComponent(targetPath)}`;
@@ -263,7 +298,13 @@ export function useVistasPublicasAdmin(session) {
                 const objectUrl = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = objectUrl;
-                a.download = fileRow?.name || targetPath.split("/").pop() || "download.bin";
+
+                const fallbackName =
+                    fileRow?.name ||
+                    String(targetPath).split("/").pop() ||
+                    "download.bin";
+
+                a.download = fallbackName;
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
@@ -272,7 +313,7 @@ export function useVistasPublicasAdmin(session) {
                 setIsDownloadingFile(false);
             }
         },
-        [session]
+        [session, resolveTargetPath]
     );
 
     const deleteFile = useCallback(
@@ -294,29 +335,23 @@ export function useVistasPublicasAdmin(session) {
     );
 
     // Navegación
-    const openDir = useCallback(
-        async (dirPath) => {
-            const next = normalizePrefix(dirPath);
-            setFilesPrefix(next);
-        },
-        []
-    );
+    const openDir = useCallback(async (dirPath) => {
+        const next = normalizePrefix(dirPath);
+        setFilesPrefix(next);
+    }, []);
 
-    const goUpDir = useCallback(
-        async () => {
-            const cur = normalizePrefix(filesPrefix);
-            if (!cur) {
-                setFilesPrefix("");
-                return;
-            }
-            const trimmed = cur.endsWith("/") ? cur.slice(0, -1) : cur;
-            const parts = trimmed.split("/").filter(Boolean);
-            parts.pop();
-            const parent = parts.length ? `${parts.join("/")}/` : "";
-            setFilesPrefix(parent);
-        },
-        [filesPrefix]
-    );
+    const goUpDir = useCallback(async () => {
+        const cur = normalizePrefix(filesPrefix);
+        if (!cur) {
+            setFilesPrefix("");
+            return;
+        }
+        const trimmed = cur.endsWith("/") ? cur.slice(0, -1) : cur;
+        const parts = trimmed.split("/").filter(Boolean);
+        parts.pop();
+        const parent = parts.length ? `${parts.join("/")}/` : "";
+        setFilesPrefix(parent);
+    }, [filesPrefix]);
 
     const selectUploadDir = useCallback((dirPath) => {
         setSelectedUploadDir(String(dirPath || ""));
@@ -378,15 +413,8 @@ export function useVistasPublicasAdmin(session) {
                     })
                 );
 
-                // createApiConn debe soportar FormData en POST (sin JSON headers)
-                res = await createApiConn(
-                    UI_ENDPOINTS.UI_ELEMENTO_EDITAR_CON_ARCHIVO,
-                    fd,
-                    "POST",
-                    session
-                );
+                res = await createApiConn(UI_ENDPOINTS.UI_ELEMENTO_EDITAR_CON_ARCHIVO, fd, "POST", session);
             } else {
-                // Sin archivo => endpoint normal
                 res = await createApiConn(UI_ENDPOINTS.UI_ELEMENTO_EDITAR, args, "POST", session);
             }
 
@@ -394,18 +422,16 @@ export function useVistasPublicasAdmin(session) {
                 throw new Error(res?.message || "No se pudo guardar el elemento.");
             }
 
-            // ✅ Guardamos info para modal de éxito
             setLastSaveOk({
                 message: res?.message || "Cambios registrados con éxito.",
                 data: res?.data || null,
             });
 
-            // refresh
             await listUiComponents({ limit: uiLimit, offset: uiOffset });
             await refreshFilesIndex();
             stopEditUiElement();
 
-            return res; // ✅ retorna el JSON real (para tu SuccessModal)
+            return res;
         } catch (err) {
             console.error("[UI_ELEMENTO_GUARDAR] error:", err);
             setSaveError(err?.message || "No se pudo guardar.");
@@ -420,12 +446,10 @@ export function useVistasPublicasAdmin(session) {
         description,
         file,
         selectedUploadDir,
-        filesPrefix,
         uiLimit,
         uiOffset,
         listUiComponents,
-        listDirs,
-        listFiles,
+        refreshFilesIndex,
         stopEditUiElement,
     ]);
 

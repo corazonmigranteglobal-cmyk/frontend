@@ -63,6 +63,7 @@ export default function MiPerfilDashboard({
 
             <div className="lg:col-span-2">
               <PerfilForm
+                session={session}
                 userType={userType}
                 profile={profile}
                 setField={setField}

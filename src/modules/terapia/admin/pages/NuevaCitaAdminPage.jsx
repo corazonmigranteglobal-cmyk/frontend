@@ -19,6 +19,12 @@ export default function NuevaCitaAdminPage({ session, onLogout, activeTab, onNav
   const [users, setUsers] = useState([]);
   const [paciente, setPaciente] = useState(null);
 
+  const adminReturnTo = useMemo(() => {
+    const p = typeof window !== "undefined" ? String(window.location?.pathname || "") : "";
+    const bp = p.startsWith("/portal-admin") ? "/portal-admin" : "/admin";
+    return `${bp}/solicitudes`;
+  }, []);
+
   useEffect(() => {
     let alive = true;
     if (!session?.user_id || !session?.id_sesion) return;
@@ -182,7 +188,7 @@ export default function NuevaCitaAdminPage({ session, onLogout, activeTab, onNav
               </button>
             </div>
 
-            <BookingPage overridePacienteId={paciente?.id} />
+            <BookingPage overridePacienteId={paciente?.id} returnTo={adminReturnTo} />
           </div>
         )}
       </main>
