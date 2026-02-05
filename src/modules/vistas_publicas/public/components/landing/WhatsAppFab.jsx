@@ -1,11 +1,23 @@
 // src/modules/vistas_publicas/public/components/landing/WhatsAppFab.jsx
 import React, { useCallback, useMemo, useState } from "react";
 
+function isIOS() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /iPhone|iPad|iPod/i.test(ua);
+}
+
 function normalizePhoneDigits(raw) {
   let d = String(raw || "").replace(/[^\d]/g, "");
 
+  // 00... => ...
   if (d.startsWith("00")) d = d.slice(2);
+
+  // Caso típico: "+591 0xxxx" (a veces meten 0 luego del país)
   if (d.startsWith("5910")) d = "591" + d.slice(4);
+
+  // Si viene como "77026706" (8 dígitos Bolivia), prefija 591
+  if (d.length === 8) d = "591" + d;
 
   return d;
 }
@@ -20,29 +32,41 @@ export default function WhatsAppFab({
   const waPhone = useMemo(() => normalizePhoneDigits(phone), [phone]);
   const text = useMemo(() => encodeURIComponent(String(message || "")), [message]);
 
-  const appHref = useMemo(() => {
-    if (!waPhone) return "";
-    // Deep link a la app (iOS suele ser lo más confiable)
-    return `whatsapp://send?phone=${waPhone}&text=${text}`;
-  }, [waPhone, text]);
-
+  // Universal link (mejor en iOS; también funciona bien en Android/desktop)
   const webHref = useMemo(() => {
     if (!waPhone) return "";
     return `https://wa.me/${waPhone}?text=${text}`;
   }, [waPhone, text]);
 
+  // Deep link (útil en Android, pero poco confiable en iOS Safari)
+  const appHref = useMemo(() => {
+    if (!waPhone) return "";
+    return `whatsapp://send?phone=${waPhone}&text=${text}`;
+  }, [waPhone, text]);
+
   const onClick = useCallback(
     (e) => {
-      e.preventDefault();
-      if (!waPhone || !appHref) return;
+      if (!waPhone) {
+        e.preventDefault();
+        return;
+      }
 
-      // Intento: abrir WhatsApp app
+      // En iOS: NO forces whatsapp:// (falla a menudo). Usa wa.me (abre app si está).
+      if (isIOS()) {
+        setShowFallback(false);
+        // dejamos que el navegador siga el href webHref (sin preventDefault)
+        return;
+      }
+
+      // En no-iOS: intentamos deep-link a la app; si no abre, mostramos fallback manual.
+      e.preventDefault();
       setShowFallback(false);
+
+      // Intento abrir app
       window.location.href = appHref;
 
-      // Si por algún motivo NO abre (app no instalada / bloqueada),
-      // mostramos un fallback manual (no automático) para que no te “pise” el flujo correcto.
-      setTimeout(() => {
+      // Fallback visible (no “redirige” solo; solo muestra botón)
+      window.setTimeout(() => {
         setShowFallback(true);
       }, 900);
     },
@@ -54,11 +78,17 @@ export default function WhatsAppFab({
   const ariaLabel = labels?.aria_label || "WhatsApp";
   const title = labels?.title || "WhatsApp";
 
+  // En iOS preferimos siempre el universal link
+  const primaryHref = isIOS() ? webHref : (appHref || webHref);
+
   return (
     <div className="fixed bottom-6 right-20 z-50 flex flex-col items-end gap-2">
       <a
-        href={appHref || webHref}
+        href={primaryHref}
         onClick={onClick}
+        // En iOS a veces ayuda abrir en nueva pestaña para disparar el universal link
+        target={isIOS() ? "_blank" : undefined}
+        rel={isIOS() ? "noreferrer noopener" : undefined}
         className="p-3 rounded-full bg-primary text-white shadow-soft hover:bg-primary-light transition-colors focus:outline-none dark:bg-white dark:text-primary"
         aria-label={ariaLabel}
         title={title}
@@ -72,6 +102,8 @@ export default function WhatsAppFab({
       {showFallback ? (
         <a
           href={webHref}
+          target="_blank"
+          rel="noreferrer noopener"
           className="px-3 py-2 rounded-xl bg-white text-slate-800 shadow-soft border border-border-light text-xs dark:bg-slate-900 dark:text-white dark:border-white/10"
         >
           Abrir en web
