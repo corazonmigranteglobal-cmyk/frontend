@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useCuentasAdmin } from "../hooks/useCuentasAdmin";
 import { useTransaccionesAdmin } from "../hooks/useTransaccionesAdmin";
+import { useProductosAdmin } from "../../../productos/admin/hooks/useProductosAdmin";
 import PaginationControls from "../components/PaginationControls";
 
 function money(n) {
@@ -27,6 +28,10 @@ function buildEmptyDraft() {
         glosa: "",
         referencia_externa: "",
         metadata: {},
+        // Campos extra cuando tipo_transaccion === 'VENTA'
+        cantidad: 1,
+        id_producto: null,
+        id_cita: null,
         movimientos: [
             { id_cuenta: null, debe: 0, haber: 0, descripcion: "" },
             { id_cuenta: null, debe: 0, haber: 0, descripcion: "" },
@@ -45,12 +50,20 @@ export default function TransaccionPage({ session }) {
         return m;
     }, [cuentas]);
 
+    // Productos (para transacción de tipo VENTA)
+    const { productos, isLoading: isLoadingProductos, error: errorProductos } = useProductosAdmin(session);
+    const productosActivos = useMemo(
+        () => (productos || []).filter((p) => (p?.register_status || "Activo") === "Activo"),
+        [productos]
+    );
+
     const {
         transacciones,
         isLoading,
         error,
         fetchTransacciones,
         registrarBatch,
+        registrarVenta,
         applyOptimisticCreatedTransaccion,
     } = useTransaccionesAdmin(session, { autoFetch: false, limit: pageSize });
 
@@ -109,6 +122,10 @@ export default function TransaccionPage({ session }) {
             glosa: selected.glosa,
             referencia_externa: selected.referencia_externa,
             metadata: selected.metadata || {},
+            // Si el backend en el futuro expone detalle de venta, se podrá mapear acá.
+            cantidad: 1,
+            id_producto: null,
+            id_cita: null,
             movimientos: (selected.movimientos || []).map((m) => ({
                 id_cuenta: m.id_cuenta,
                 debe: m.debe,
@@ -162,6 +179,19 @@ export default function TransaccionPage({ session }) {
             alert("Tipo de documento / tipo_transaccion es requerido");
             return;
         }
+
+        const isVenta = String(draft.tipo_transaccion || "").toUpperCase() === "VENTA";
+        if (isVenta) {
+            if (!draft?.id_producto) {
+                alert("Para una VENTA debes seleccionar un producto (id_producto)");
+                return;
+            }
+            const cant = Number(draft?.cantidad);
+            if (!Number.isFinite(cant) || cant <= 0) {
+                alert("Para una VENTA la cantidad debe ser mayor a 0");
+                return;
+            }
+        }
         const movs = (draft.movimientos || []).filter((m) => m.id_cuenta);
         if (movs.length < 2) {
             alert("Debes registrar al menos 2 movimientos (con cuenta)");
@@ -193,21 +223,42 @@ export default function TransaccionPage({ session }) {
                 })),
             };
 
-            const res = await registrarBatch({ transacciones: [payloadTransaccion], stopOnError: false });
-            const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
-            const first = Array.isArray(r0?.data?.results) ? r0.data.results[0] : null;
-            if (!first || String(first.status).toLowerCase() !== "ok") {
-                throw new Error(first?.message || r0?.message || "No se pudo registrar la transacción");
-            }
+            let id_transaccion = null;
+            let created_at = new Date().toISOString();
+            let register_status = "Activo";
+            let movimientos_ids = [];
 
-            // Construir transacción optimista para UI/cache (la lista puede tardar en reflejar o no traer metadata)
-            const t = first.data?.transaccion || {};
-            const id_transaccion = first.data?.id_transaccion || t.id_transaccion;
+            if (isVenta) {
+                const res = await registrarVenta({
+                    fecha: payloadTransaccion.fecha,
+                    glosa: payloadTransaccion.glosa,
+                    referencia_externa: payloadTransaccion.referencia_externa,
+                    metadata: payloadTransaccion.metadata,
+                    movimientos: payloadTransaccion.movimientos,
+                    cantidad: Number(draft.cantidad) || 0,
+                    id_producto: Number(draft.id_producto) || null,
+                    id_cita: draft.id_cita ? Number(draft.id_cita) : null,
+                });
+                id_transaccion = res?.data?.id_transaccion || null;
+                if (!id_transaccion) throw new Error(res?.message || "No se pudo registrar la transacción de venta");
+            } else {
+                const res = await registrarBatch({ transacciones: [payloadTransaccion], stopOnError: false });
+                const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
+                const first = Array.isArray(r0?.data?.results) ? r0.data.results[0] : null;
+                if (!first || String(first.status).toLowerCase() !== "ok") {
+                    throw new Error(first?.message || r0?.message || "No se pudo registrar la transacción");
+                }
+                const t = first.data?.transaccion || {};
+                id_transaccion = first.data?.id_transaccion || t.id_transaccion;
+                created_at = t.created_at || created_at;
+                register_status = t.register_status || register_status;
+                movimientos_ids = first.data?.movimientos_ids || [];
+            }
 
             const movimientosOptimistas = payloadTransaccion.movimientos.map((m, idx) => {
                 const c = cuentasById.get(m.id_cuenta) || {};
                 return {
-                    id_movimiento: (first.data?.movimientos_ids || [])[idx] || null,
+                    id_movimiento: movimientos_ids[idx] || null,
                     id_cuenta: m.id_cuenta,
                     cuenta_codigo: c.codigo || "",
                     cuenta_nombre: c.nombre || "",
@@ -223,8 +274,8 @@ export default function TransaccionPage({ session }) {
                 tipo_transaccion: payloadTransaccion.tipo_transaccion,
                 glosa: payloadTransaccion.glosa,
                 referencia_externa: payloadTransaccion.referencia_externa,
-                created_at: t.created_at || new Date().toISOString(),
-                register_status: t.register_status || "Activo",
+                created_at,
+                register_status,
                 metadata: payloadTransaccion.metadata || {},
                 movimientos: movimientosOptimistas,
                 total_debe: totals.debe,
@@ -400,6 +451,7 @@ export default function TransaccionPage({ session }) {
                                         className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
                                     >
                                         <option value="">- Seleccionar -</option>
+                                        <option value="VENTA">VENTA</option>
                                         <option value="INGRESO">INGRESO</option>
                                         <option value="AJUSTE">AJUSTE</option>
                                         <option value="EGRESO">EGRESO</option>
@@ -410,6 +462,72 @@ export default function TransaccionPage({ session }) {
                                     </select>
                                 </div>
 
+                                {String(draft.tipo_transaccion || "").toUpperCase() === "VENTA" ? (
+                                    <>
+                                        <div className="md:col-span-6">
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                Producto <span className="text-primary">*</span>
+                                            </label>
+                                            <select
+                                                value={draft.id_producto || ""}
+                                                onChange={(e) =>
+                                                    setDraft((d) => ({
+                                                        ...d,
+                                                        id_producto: e.target.value ? Number(e.target.value) : null,
+                                                    }))
+                                                }
+                                                className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
+                                            >
+                                                <option value="">- Seleccionar producto -</option>
+                                                {(productosActivos || []).map((p) => (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.nombre} {p.precio ? `— ${p.precio} ${p.moneda || ""}` : ""}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {isLoadingProductos ? (
+                                                <p className="text-xs text-slate-400 mt-1">Cargando productos...</p>
+                                            ) : null}
+                                            {errorProductos ? (
+                                                <p className="text-xs text-red-600 mt-1">{errorProductos}</p>
+                                            ) : null}
+                                        </div>
+
+                                        <div className="md:col-span-3">
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                Cantidad <span className="text-primary">*</span>
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
+                                                value={draft.cantidad ?? 1}
+                                                onChange={(e) =>
+                                                    setDraft((d) => ({
+                                                        ...d,
+                                                        cantidad: e.target.value === "" ? "" : Number(e.target.value),
+                                                    }))
+                                                }
+                                            />
+                                        </div>
+
+                                        <div className="md:col-span-3">
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">ID Cita (opcional)</label>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
+                                                value={draft.id_cita ?? ""}
+                                                onChange={(e) =>
+                                                    setDraft((d) => ({
+                                                        ...d,
+                                                        id_cita: e.target.value ? Number(e.target.value) : null,
+                                                    }))
+                                                }
+                                            />
+                                        </div>
+                                    </>
+                                ) : null}
                                 <div className="md:col-span-12">
                                     <label className="block text-sm font-medium text-slate-700 mb-1">
                                         Concepto / Descripción

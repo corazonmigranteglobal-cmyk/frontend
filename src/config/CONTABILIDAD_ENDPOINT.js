@@ -16,4 +16,5 @@ export const CONTABILIDAD_ENDPOINT = {
 
     CONTABILIDAD_TRANSACCIONES_BATCH: "/api/contabilidad/transacciones/batch/crear",
     CONTABILIDAD_TRANSACCIONES_LISTAR: "/api/contabilidad/transacciones/listar",
+    CONTABILIDAD_TRANSACCION_VENTA_CREAR: "/api/contabilidad/transacciones/venta/crear",
 };

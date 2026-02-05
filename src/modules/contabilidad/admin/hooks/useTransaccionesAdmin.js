@@ -204,6 +204,42 @@ export function useTransaccionesAdmin(session, { autoFetch = true, limit = 200 }
         [session]
     );
 
+    const registrarVenta = useCallback(
+        async ({
+            fecha,
+            glosa,
+            referencia_externa,
+            metadata,
+            movimientos,
+            cantidad,
+            id_producto,
+            id_cita = null,
+        }) => {
+            const endpoint = CONTABILIDAD_ENDPOINT?.CONTABILIDAD_TRANSACCION_VENTA_CREAR;
+            if (!endpoint) throw new Error("Endpoint CONTABILIDAD_TRANSACCION_VENTA_CREAR no definido");
+            if (!session?.id_sesion) throw new Error("Sesión inválida (id_sesion faltante)");
+
+            const payload = {
+                ...getActorPayload(session),
+                p_fecha: fecha,
+                p_glosa: glosa,
+                p_referencia_externa: referencia_externa,
+                p_metadata: metadata || {},
+                p_movimientos: movimientos || [],
+                p_cantidad: cantidad,
+                p_id_producto: id_producto,
+                ...(id_cita ? { p_id_cita: id_cita } : {}),
+            };
+
+            const res = await createApiConn(endpoint, payload, "POST", session);
+            if (res?.ok === false) {
+                throw new Error(res?.message || "No se pudo registrar la transacción de venta");
+            }
+            return res;
+        },
+        [session]
+    );
+
     useEffect(() => {
         if (!session?.id_sesion) return;
         ensureCacheShape(session);
@@ -238,6 +274,7 @@ export function useTransaccionesAdmin(session, { autoFetch = true, limit = 200 }
         error,
         fetchTransacciones,
         registrarBatch,
+        registrarVenta,
         setTransacciones,
         setError,
         applyOptimisticCreatedTransaccion,
