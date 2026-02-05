@@ -4,8 +4,10 @@ import { useTransaccionesAdmin } from "../hooks/useTransaccionesAdmin";
 import { useProductosAdmin } from "../../../productos/admin/hooks/useProductosAdmin";
 import PaginationControls from "../components/PaginationControls";
 
-// ✅ Citas realizadas (para VENTA -> vincular a cita)
-import { TERAPIA_ENDPOINTS } from "../../../terapia/config/TERAPIA_ENDPOINTS";
+// ✅ Ajusta este import SOLO si tu archivo vive en otro path.
+// Debe apuntar al archivo donde ya tienes: CITAS_SOLICITUDES_LISTAR: "/api/terapia/admin/citas/solicitudes/listar"
+import { TERAPIA_ENDPOINTS } from "../../../../config/TERAPIA_ENDPOINTS";
+
 import { createApiConn } from "../../../../helpers/api_conn_factory";
 
 function normalizeEstado(v) {
@@ -15,9 +17,9 @@ function normalizeEstado(v) {
         .toUpperCase()
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, ""); // quita tildes
-    // Mapeos frecuentes
+
+    // Normalizaciones comunes
     if (s === "REALIZADO") return "REALIZADA";
-    if (s === "DONE") return "REALIZADA";
     return s;
 }
 
@@ -94,7 +96,7 @@ export default function TransaccionPage({ session }) {
     const [draft, setDraft] = useState(buildEmptyDraft);
     const [isSaving, setIsSaving] = useState(false);
 
-    // ✅ Citas realizadas
+    // ✅ Citas realizadas (para VENTA)
     const [citasRealizadas, setCitasRealizadas] = useState([]);
     const [isLoadingCitas, setIsLoadingCitas] = useState(false);
     const [errorCitas, setErrorCitas] = useState("");
@@ -102,8 +104,9 @@ export default function TransaccionPage({ session }) {
     useEffect(() => {
         let alive = true;
 
-        async function loadCitas() {
+        async function loadCitasRealizadas() {
             if (!session?.id_sesion) return;
+
             setIsLoadingCitas(true);
             setErrorCitas("");
 
@@ -115,20 +118,31 @@ export default function TransaccionPage({ session }) {
                     p_offset: 0,
                 };
 
-                // ✅ Debe traer las citas disponibles con el endpoint listar/citas
-                // (tu config debe mapear TERAPIA_ENDPOINTS.CITAS_LISTAR a esa ruta)
-                const res = await createApiConn(TERAPIA_ENDPOINTS.CITAS_LISTAR, payload, "POST", session);
+                const res = await createApiConn(
+                    TERAPIA_ENDPOINTS.CITAS_SOLICITUDES_LISTAR,
+                    payload,
+                    "POST",
+                    session
+                );
 
-                const rows = Array.isArray(res?.rows) ? res.rows : Array.isArray(res?.items) ? res.items : [];
+                // Soportar distintas formas de respuesta sin romper
+                const rows =
+                    (Array.isArray(res?.rows) ? res.rows : null) ??
+                    (Array.isArray(res?.items) ? res.items : null) ??
+                    (Array.isArray(res?.data?.rows) ? res.data.rows : null) ??
+                    (Array.isArray(res?.data?.items) ? res.data.items : null) ??
+                    [];
 
-                // ✅ Filtrar solo las citas REALIZADAS
+                // Filtrar solo REALIZADA
                 const realizadas = (rows || [])
                     .filter((r) => normalizeEstado(r?.estado || r?.estado_cita || r?.register_status) === "REALIZADA")
                     .map((r) => {
-                        const id = r?.id_cita ?? r?.id ?? r?.cita_id ?? null;
+                        const id = r?.id_cita ?? r?.cita_id ?? r?.id ?? null;
+
+                        // Campos típicos
                         const fecha = r?.fecha_programada ?? r?.fecha ?? r?.fecha_cita ?? "";
-                        const inicio = r?.inicio ?? r?.hora_inicio ?? r?.hora_desde ?? "";
-                        const fin = r?.fin ?? r?.hora_fin ?? r?.hora_hasta ?? "";
+                        const inicio = r?.hora_inicio ?? r?.inicio ?? r?.hora_desde ?? "";
+                        const fin = r?.hora_fin ?? r?.fin ?? r?.hora_hasta ?? "";
                         const paciente = r?.paciente_nombre ?? r?.nombre_paciente ?? r?.paciente ?? r?.nombre ?? "";
                         const terapeuta = r?.terapeuta_nombre ?? r?.nombre_terapeuta ?? r?.terapeuta ?? "";
                         const producto = r?.producto_nombre ?? r?.nombre_producto ?? r?.producto ?? "";
@@ -150,6 +164,7 @@ export default function TransaccionPage({ session }) {
 
                 if (!alive) return;
 
+                // Ordenar por fecha desc si viene en formato comparable
                 const sorted = [...realizadas].sort((a, b) =>
                     String(b?.raw?.fecha_programada || b?.raw?.fecha || "").localeCompare(
                         String(a?.raw?.fecha_programada || a?.raw?.fecha || "")
@@ -167,7 +182,7 @@ export default function TransaccionPage({ session }) {
             }
         }
 
-        loadCitas();
+        loadCitasRealizadas();
         return () => {
             alive = false;
         };
@@ -223,7 +238,6 @@ export default function TransaccionPage({ session }) {
             id_producto: null,
             id_cita: null,
             movimientos: (selected.movimientos || []).map((m) => ({
-                // (si viniera id_movimiento, lo conservamos para key estable)
                 id_movimiento: m.id_movimiento ?? null,
                 id_cuenta: m.id_cuenta,
                 debe: m.debe,
@@ -346,7 +360,7 @@ export default function TransaccionPage({ session }) {
                 glosa: draft.glosa,
                 referencia_externa: draft.referencia_externa,
                 metadata: draft.metadata || {},
-                movimientos: movs, // ✅ ya normalizado
+                movimientos: movs,
             };
 
             let id_transaccion = null;
@@ -410,7 +424,6 @@ export default function TransaccionPage({ session }) {
 
             applyOptimisticCreatedTransaccion(newTrans);
 
-            // Refetch suave para alinear con backend (sin hard reload)
             setOffset(0);
             fetchTransacciones({ offset: 0 });
             onNew();
@@ -541,11 +554,11 @@ export default function TransaccionPage({ session }) {
                                 count={transacciones.length}
                                 isLoading={isLoading}
                                 onPrev={() => setOffset((o) => Math.max(0, o - pageSize))}
-                                onNext={() => setOffset((o) => o + pageSize))}
-                            onLimitChange={(n) => {
-                                setPageSize(n);
-                                setOffset(0);
-                            }}
+                                onNext={() => setOffset((o) => o + pageSize)}   // ✅ corregido
+                                onLimitChange={(n) => {
+                                    setPageSize(n);
+                                    setOffset(0);
+                                }}
                             />
                             <div className="flex items-center justify-between text-xs text-slate-500">
                                 <span>{flatLines.length} líneas (en esta página)</span>
@@ -656,11 +669,12 @@ export default function TransaccionPage({ session }) {
                                             />
                                         </div>
 
-                                        {/* ✅ reemplaza input por select con citas REALIZADAS */}
+                                        {/* ✅ Reemplazo del input por SELECT de citas realizadas */}
                                         <div className="md:col-span-3">
                                             <label className="block text-sm font-medium text-slate-700 mb-1">
                                                 Cita realizada (opcional)
                                             </label>
+
                                             <select
                                                 value={draft.id_cita ?? ""}
                                                 onChange={(e) =>
@@ -701,6 +715,8 @@ export default function TransaccionPage({ session }) {
                         </div>
                     </div>
 
+                    {/* El resto del componente (tabla movimientos, footer, botones) queda igual */}
+                    {/* ... TU CÓDIGO ORIGINAL DESDE AQUÍ NO CAMBIA ... */}
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-grow flex flex-col overflow-hidden">
                         <div className="p-5 border-b border-slate-200 bg-rose-50/50 flex justify-between items-center">
                             <div className="flex items-center gap-2">
