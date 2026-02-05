@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import HeaderAdmin from "../components/HeaderAdmin";
 import SolicitudesList from "../components/SolicitudesList";
@@ -17,6 +18,7 @@ import { useCitaActions } from "../hooks/useCitaActions";
 export default function RequestDashboard({ session, onLogout, activeTab, onNavigate }) {
     const [guideStep, setGuideStep] = useState(0);
     const [viewMode, setViewMode] = useState("list"); // "list" | "agenda"
+    const navigate = useNavigate();
 
     const {
         query,
@@ -86,7 +88,7 @@ export default function RequestDashboard({ session, onLogout, activeTab, onNavig
                                     Agenda
                                 </button>
                             </div>
-                            <button className="flex items-center gap-2 px-5 py-3 bg-primary text-white text-xs font-bold uppercase tracking-widest rounded-xl shadow-lg shadow-primary/20 hover:bg-black transition-all">
+                            <button onClick={() => navigate("nueva-cita")} className="flex items-center gap-2 px-5 py-3 bg-primary text-white text-xs font-bold uppercase tracking-widest rounded-xl shadow-lg shadow-primary/20 hover:bg-black transition-all">
                                 <span className="material-symbols-outlined text-sm">add_circle</span> Nueva Cita
                             </button>
                         </div>

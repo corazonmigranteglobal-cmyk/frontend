@@ -127,6 +127,8 @@ export default function TransaccionPage({ session }) {
             id_producto: null,
             id_cita: null,
             movimientos: (selected.movimientos || []).map((m) => ({
+                // (si viniera id_movimiento, lo conservamos para key estable)
+                id_movimiento: m.id_movimiento ?? null,
                 id_cuenta: m.id_cuenta,
                 debe: m.debe,
                 haber: m.haber,
@@ -192,12 +194,34 @@ export default function TransaccionPage({ session }) {
                 return;
             }
         }
-        const movs = (draft.movimientos || []).filter((m) => m.id_cuenta);
+
+        // ✅ Normalizar + deduplicar antes de validar/enviar
+        const movsRaw = (draft.movimientos || [])
+            .filter((m) => m.id_cuenta)
+            .map((m) => ({
+                id_cuenta: Number(m.id_cuenta) || null,
+                debe: Number(m.debe) || 0,
+                haber: Number(m.haber) || 0,
+                descripcion: (m.descripcion || "").trim() || null,
+            }))
+            .filter((m) => m.id_cuenta);
+
+        const seen = new Set();
+        const movs = [];
+        for (const m of movsRaw) {
+            const key = `${m.id_cuenta}|${m.debe}|${m.haber}|${m.descripcion || ""}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            movs.push(m);
+        }
+
         if (movs.length < 2) {
             alert("Debes registrar al menos 2 movimientos (con cuenta)");
             return;
         }
+
         const { debe, haber } = computeTotals(movs);
+
         if (debe !== haber) {
             alert("El asiento no está balanceado (Debe debe ser igual a Haber)");
             return;
@@ -205,6 +229,17 @@ export default function TransaccionPage({ session }) {
         if (debe <= 0) {
             alert("El total debe/haber debe ser mayor a 0");
             return;
+        }
+
+        // ✅ Detección del patrón típico de duplicación: múltiples HABER con mismo monto
+        const haberesPositivos = movs.filter((m) => (Number(m.haber) || 0) > 0);
+        if (haberesPositivos.length >= 2) {
+            const monto = Number(haberesPositivos[0].haber) || 0;
+            const allSame = haberesPositivos.every((h) => (Number(h.haber) || 0) === monto);
+            if (monto > 0 && allSame) {
+                alert("Tienes múltiples líneas en HABER con el mismo monto. Revisa duplicación (WF/Ingreso).");
+                return;
+            }
         }
 
         setIsSaving(true);
@@ -215,12 +250,7 @@ export default function TransaccionPage({ session }) {
                 glosa: draft.glosa,
                 referencia_externa: draft.referencia_externa,
                 metadata: draft.metadata || {},
-                movimientos: movs.map((m) => ({
-                    id_cuenta: m.id_cuenta,
-                    debe: Number(m.debe) || 0,
-                    haber: Number(m.haber) || 0,
-                    descripcion: m.descripcion || null,
-                })),
+                movimientos: movs, // ✅ ya normalizado
             };
 
             let id_transaccion = null;
@@ -278,8 +308,8 @@ export default function TransaccionPage({ session }) {
                 register_status,
                 metadata: payloadTransaccion.metadata || {},
                 movimientos: movimientosOptimistas,
-                total_debe: totals.debe,
-                total_haber: totals.haber,
+                total_debe: debe,
+                total_haber: haber,
             };
 
             applyOptimisticCreatedTransaccion(newTrans);
@@ -354,31 +384,52 @@ export default function TransaccionPage({ session }) {
 
                                 <tbody className="divide-y divide-slate-200">
                                     {isLoading ? (
-                                        <tr><td className="px-3 py-6 text-slate-500" colSpan={4}>Cargando...</td></tr>
+                                        <tr>
+                                            <td className="px-3 py-6 text-slate-500" colSpan={4}>
+                                                Cargando...
+                                            </td>
+                                        </tr>
                                     ) : error ? (
-                                        <tr><td className="px-3 py-6 text-red-600" colSpan={4}>{error}</td></tr>
+                                        <tr>
+                                            <td className="px-3 py-6 text-red-600" colSpan={4}>
+                                                {error}
+                                            </td>
+                                        </tr>
                                     ) : flatLines.length === 0 ? (
-                                        <tr><td className="px-3 py-6 text-slate-500" colSpan={4}>Sin transacciones</td></tr>
+                                        <tr>
+                                            <td className="px-3 py-6 text-slate-500" colSpan={4}>
+                                                Sin transacciones
+                                            </td>
+                                        </tr>
                                     ) : (
                                         flatLines.map((r, idx) => (
                                             <tr
                                                 key={`${r.id_transaccion}-${idx}`}
                                                 onClick={() => setActiveId(r.id_transaccion)}
-                                                className={`group hover:bg-rose-50 transition-colors cursor-pointer border-l-4 ${activeId === r.id_transaccion ? "border-primary bg-rose-50/40" : "border-transparent hover:border-primary"}`}
+                                                className={`group hover:bg-rose-50 transition-colors cursor-pointer border-l-4 ${activeId === r.id_transaccion
+                                                        ? "border-primary bg-rose-50/40"
+                                                        : "border-transparent hover:border-primary"
+                                                    }`}
                                             >
                                                 <td className="px-3 py-3 align-top whitespace-nowrap">
                                                     <div className="text-slate-900 font-medium">{r.fecha?.slice(5) || ""}</div>
                                                     <div className="text-xs text-slate-400">#{r.id_transaccion}</div>
                                                 </td>
                                                 <td className="px-3 py-3 align-top">
-                                                    <div className="text-slate-800 font-medium text-xs sm:text-sm">{r.cuenta_nombre || "—"}</div>
+                                                    <div className="text-slate-800 font-medium text-xs sm:text-sm">
+                                                        {r.cuenta_nombre || "—"}
+                                                    </div>
                                                     <div className="text-xs text-slate-500 font-mono mt-0.5">{r.cuenta_codigo || ""}</div>
                                                 </td>
                                                 <td className="px-2 py-3 align-top text-right">
-                                                    <div className="text-emerald-700 font-bold text-xs sm:text-sm">{r.debe ? money(r.debe) : "-"}</div>
+                                                    <div className="text-emerald-700 font-bold text-xs sm:text-sm">
+                                                        {r.debe ? money(r.debe) : "-"}
+                                                    </div>
                                                 </td>
                                                 <td className="px-2 py-3 align-top text-right">
-                                                    <div className="text-blue-700 font-bold text-xs sm:text-sm">{r.haber ? money(r.haber) : "-"}</div>
+                                                    <div className="text-blue-700 font-bold text-xs sm:text-sm">
+                                                        {r.haber ? money(r.haber) : "-"}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))
@@ -485,12 +536,8 @@ export default function TransaccionPage({ session }) {
                                                     </option>
                                                 ))}
                                             </select>
-                                            {isLoadingProductos ? (
-                                                <p className="text-xs text-slate-400 mt-1">Cargando productos...</p>
-                                            ) : null}
-                                            {errorProductos ? (
-                                                <p className="text-xs text-red-600 mt-1">{errorProductos}</p>
-                                            ) : null}
+                                            {isLoadingProductos ? <p className="text-xs text-slate-400 mt-1">Cargando productos...</p> : null}
+                                            {errorProductos ? <p className="text-xs text-red-600 mt-1">{errorProductos}</p> : null}
                                         </div>
 
                                         <div className="md:col-span-3">
@@ -528,10 +575,9 @@ export default function TransaccionPage({ session }) {
                                         </div>
                                     </>
                                 ) : null}
+
                                 <div className="md:col-span-12">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        Concepto / Descripción
-                                    </label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Concepto / Descripción</label>
                                     <input
                                         className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2 placeholder-slate-400"
                                         placeholder="Ej: Registro de donación en efectivo evento anual..."
@@ -580,15 +626,21 @@ export default function TransaccionPage({ session }) {
                                 <tbody className="divide-y divide-slate-200">
                                     {(draft.movimientos || []).map((m, idx) => {
                                         const c = m.id_cuenta ? cuentasById.get(m.id_cuenta) : null;
+                                        const rowKey =
+                                            m.id_movimiento ??
+                                            `${m.id_cuenta ?? "null"}-${String(m.debe ?? "")}-${String(m.haber ?? "")}-${idx}`;
+
                                         return (
-                                            <tr key={idx} className="group hover:bg-rose-50/30 transition-colors">
+                                            <tr key={rowKey} className="group hover:bg-rose-50/30 transition-colors">
                                                 <td className="px-4 py-3 border-r border-slate-200 align-top font-mono text-sm text-slate-800">
                                                     {c?.codigo || "—"}
                                                 </td>
                                                 <td className="p-0 border-r border-slate-200 align-top relative">
                                                     <select
                                                         value={m.id_cuenta || ""}
-                                                        onChange={(e) => onChangeMov(idx, { id_cuenta: e.target.value ? Number(e.target.value) : null })}
+                                                        onChange={(e) =>
+                                                            onChangeMov(idx, { id_cuenta: e.target.value ? Number(e.target.value) : null })
+                                                        }
                                                         className="w-full h-full text-sm border-0 bg-transparent px-4 py-3 pr-8 focus:bg-white focus:ring-inset focus:ring-2 focus:ring-primary transition-all text-slate-800 font-medium truncate"
                                                     >
                                                         <option value="">- Seleccionar cuenta -</option>
@@ -652,9 +704,7 @@ export default function TransaccionPage({ session }) {
                         </div>
 
                         <div className="p-6 bg-white border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 mt-auto">
-                            <div className="text-xs text-slate-500 italic">
-                                * Todos los cambios se guardan automáticamente en borrador.
-                            </div>
+                            <div className="text-xs text-slate-500 italic">* Todos los cambios se guardan automáticamente en borrador.</div>
                             <div className="flex gap-3 w-full sm:w-auto">
                                 <button className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 font-medium transition-colors text-sm">
                                     Cancelar
@@ -662,7 +712,8 @@ export default function TransaccionPage({ session }) {
                                 <button
                                     onClick={onSave}
                                     disabled={isSaving || !isBalanced}
-                                    className={`flex-1 sm:flex-none px-8 py-2.5 rounded-lg ${isSaving || !isBalanced ? "bg-slate-300" : "bg-primary hover:bg-[#5a2634]"} text-white shadow-md hover:shadow-lg transform active:scale-[0.98] transition-all font-semibold flex items-center justify-center gap-2 text-sm`}
+                                    className={`flex-1 sm:flex-none px-8 py-2.5 rounded-lg ${isSaving || !isBalanced ? "bg-slate-300" : "bg-primary hover:bg-[#5a2634]"
+                                        } text-white shadow-md hover:shadow-lg transform active:scale-[0.98] transition-all font-semibold flex items-center justify-center gap-2 text-sm`}
                                 >
                                     <span className="material-symbols-outlined text-[20px]">save</span> Guardar Asiento
                                 </button>

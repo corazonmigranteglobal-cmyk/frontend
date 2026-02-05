@@ -11,7 +11,7 @@ import { useBooking } from "../hooks/useBooking";
  * 3. Selección de fecha/hora
  * 4. Confirmación
  */
-export default function BookingPage() {
+export default function BookingPage({ overridePacienteId = null } = {}) {
     const navigate = useNavigate();
     const { session } = useSession();
     const {
@@ -22,9 +22,7 @@ export default function BookingPage() {
         getBookingBootstrap,
         getDisponibilidad,
         registrarCita,
-    } = useBooking();
-
-    const [step, setStep] = useState(1);
+    } = useBooking({ overridePacienteId });const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
         enfoque: null,
         producto: null,

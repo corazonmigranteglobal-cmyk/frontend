@@ -23,13 +23,21 @@ export default function HeaderAdmin({
 
     useEffect(() => {
         const onDocClick = (e) => {
-            if (!isProductsMenuOpen) return;
-            if (!productsMenuRef.current) return;
-            if (!productsMenuRef.current.contains(e.target)) {
+            // Close Productos menu when clicking outside
+            if (
+                isProductsMenuOpen &&
+                productsMenuRef.current &&
+                !productsMenuRef.current.contains(e.target)
+            ) {
                 setIsProductsMenuOpen(false);
             }
 
-            if (isContaMenuOpen && contaMenuRef.current && !contaMenuRef.current.contains(e.target)) {
+            // Close Contabilidad menu when clicking outside
+            if (
+                isContaMenuOpen &&
+                contaMenuRef.current &&
+                !contaMenuRef.current.contains(e.target)
+            ) {
                 setIsContaMenuOpen(false);
             }
         };
@@ -110,7 +118,22 @@ export default function HeaderAdmin({
                         <button
                             type="button"
                             className={tabClass("contabilidad")}
-                            onClick={() => setIsContaMenuOpen((v) => !v)}
+                            onClick={() => {
+                                // Keep only one dropdown open at a time
+                                setIsProductsMenuOpen(false);
+
+                                // If we are coming from another module, navigate first so the Contabilidad pages mount
+                                if (activeTab !== "contabilidad") {
+                                    // Navigate directly to the contabilidad sub-route
+                                    const nextModule = contaModule || "cuenta";
+                                    onNavigate?.(`contabilidad/${nextModule}`);
+                                    setIsContaMenuOpen(true);
+                                    return;
+                                }
+
+                                // If already in contabilidad, just toggle the dropdown
+                                setIsContaMenuOpen((v) => !v);
+                            }}
                         >
                             <span className="inline-flex items-center gap-2">
                                 Contabilidad
@@ -125,8 +148,7 @@ export default function HeaderAdmin({
                                     className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm"
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
-                                        setContaModule?.("cuenta");
-                                        if (!setContaModule) onNavigate?.("contabilidad");
+                                        onNavigate?.("contabilidad/cuenta");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">account_tree</span>
@@ -143,8 +165,7 @@ export default function HeaderAdmin({
                                     className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm"
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
-                                        setContaModule?.("grupo_cuenta");
-                                        if (!setContaModule) onNavigate?.("contabilidad");
+                                        onNavigate?.("contabilidad/grupo_cuenta");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">folder</span>
@@ -161,8 +182,7 @@ export default function HeaderAdmin({
                                     className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm"
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
-                                        setContaModule?.("centro_costo");
-                                        if (!setContaModule) onNavigate?.("contabilidad");
+                                        onNavigate?.("contabilidad/centro_costo");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">apartment</span>
@@ -179,8 +199,7 @@ export default function HeaderAdmin({
                                     className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm"
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
-                                        setContaModule?.("transaccion");
-                                        if (!setContaModule) onNavigate?.("contabilidad");
+                                        onNavigate?.("contabilidad/transaccion");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">receipt_long</span>
@@ -207,7 +226,11 @@ export default function HeaderAdmin({
                         <button
                             type="button"
                             className={tabClass("productos")}
-                            onClick={() => setIsProductsMenuOpen((v) => !v)}
+                            onClick={() => {
+                                // Keep only one dropdown open at a time
+                                setIsContaMenuOpen(false);
+                                setIsProductsMenuOpen((v) => !v);
+                            }}
                         >
                             <span className="inline-flex items-center gap-2">
                                 Productos

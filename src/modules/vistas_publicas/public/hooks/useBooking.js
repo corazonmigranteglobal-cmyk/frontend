@@ -6,7 +6,7 @@ import { useSession } from "../../../../app/auth/SessionContext";
 /**
  * Hook para gestión de reservas de citas terapéuticas
  */
-export function useBooking() {
+export function useBooking({ overridePacienteId = null } = {}) {
     const { session } = useSession();
 
     const [loading, setLoading] = useState(false);
@@ -131,6 +131,7 @@ export function useBooking() {
                     args: {
                         ...authParams,
                         p_id_usuario_terapeuta: idTerapeuta,
+                        p_id_usuario_paciente: (overridePacienteId != null ? overridePacienteId : authParams.p_actor_user_id),
                     },
                 };
 
@@ -208,7 +209,8 @@ export function useBooking() {
                     args: {
                         ...authParams,
                         p_id_usuario_terapeuta: idTerapeuta,
-                        p_id_usuario_paciente: authParams.p_actor_user_id,
+                        p_id_usuario_paciente: (overridePacienteId != null ? overridePacienteId : authParams.p_actor_user_id),
+                        p_id_usuario_paciente: (overridePacienteId != null ? overridePacienteId : authParams.p_actor_user_id),
                         p_id_producto: idProducto,
                         p_fecha: fecha,
                         // clave: NO enviar Z/UTC. Enviar timestamptz con offset local.

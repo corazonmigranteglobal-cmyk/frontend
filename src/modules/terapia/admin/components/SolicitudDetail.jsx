@@ -12,6 +12,7 @@ export default function SolicitudDetail({
     onOpenConfirm,
     onOpenRealizar,
     className = "col-span-12 lg:col-span-8",
+    variant = "list", // "list" | "agenda"
 }) {
     const estadoNorm = normalizeEstado(selected?.estado);
 
@@ -28,8 +29,12 @@ export default function SolicitudDetail({
     const disableReject = disableAll;
     const disableReprogram = disableAll;
 
+    const isAgenda = variant === "agenda";
+
     return (
-        <section className={`${className} bg-white rounded-2xl shadow-2xl shadow-slate-200 border border-slate-200 overflow-hidden flex flex-col`}>
+        <section
+            className={`${className} bg-white rounded-2xl shadow-2xl shadow-slate-200 border border-slate-200 overflow-hidden flex flex-col`}
+        >
             <div className="px-5 py-5 sm:px-8 sm:py-8 border-b border-slate-100 flex items-start sm:items-center justify-between bg-white gap-4">
                 <div className="flex items-center gap-6">
                     {selected?.avatar ? (
@@ -46,34 +51,62 @@ export default function SolicitudDetail({
 
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-3 mb-1">
-                            <h2 className="text-2xl sm:text-3xl font-display font-bold text-slate-900 truncate max-w-[18rem] sm:max-w-none">{selected?.nombre}</h2>
-                            <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest ${selected?.estadoBadgeClass || "bg-slate-100 text-slate-500"}`}>
+                            <h2 className="text-2xl sm:text-3xl font-display font-bold text-slate-900 truncate max-w-[18rem] sm:max-w-none">
+                                {selected?.nombre}
+                            </h2>
+
+                            <span
+                                className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest ${selected?.estadoBadgeClass || "bg-slate-100 text-slate-500"
+                                    }`}
+                            >
                                 {selected?.estado || ""}
                             </span>
                         </div>
 
-                        <p className="text-sm text-slate-500 flex items-center gap-4">
-                            <span className="flex items-center gap-1.5">
-                                <span className="material-symbols-outlined text-primary text-[18px]">badge</span>
-                                ID: {selected?.id}
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                <span className="material-symbols-outlined text-primary text-[18px]">history</span>
-                                Registrada: {selected?.registrada}
-                            </span>
-                        </p>
+                        {/* AGENDA vs LISTA (tu cambio principal) */}
+                        {isAgenda ? (
+                            <p className="text-sm text-slate-500 flex items-center gap-4 grid grid-cols-1">
+                                <span className="flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-primary text-[18px]">badge</span>
+                                    ID: {selected?.id}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-primary text-[18px]">history</span>
+                                    Registrada: {selected?.registrada}
+                                </span>
+                            </p>
+                        ) : (
+                            <p className="text-sm text-slate-500 flex items-center gap-4">
+                                <span className="flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-primary text-[18px]">badge</span>
+                                    ID: {selected?.id}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-primary text-[18px]">history</span>
+                                    Registrada: {selected?.registrada}
+                                </span>
+                            </p>
+                        )}
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <button className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 transition-all rounded-xl border border-slate-100" title="Más">
-                        <span className="material-symbols-outlined">more_vert</span>
-                    </button>
-                </div>
+                {/* Botón "Más" solo en LISTA */}
+                {!isAgenda && (
+                    <div className="flex items-center gap-2">
+                        <button
+                            className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 transition-all rounded-xl border border-slate-100"
+                            title="Más"
+                            type="button"
+                        >
+                            <span className="material-symbols-outlined">more_vert</span>
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6 sm:p-8 lg:p-10">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-10">
+                {/* AGENDA = 1 columna / LISTA = 2 columnas */}
+                <div className={`grid grid-cols-1 ${isAgenda ? "lg:grid-cols-1" : "lg:grid-cols-2"} gap-x-12 gap-y-10`}>
                     <div className="space-y-8">
                         <div>
                             <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-5">
@@ -87,7 +120,9 @@ export default function SolicitudDetail({
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Correo</p>
-                                        <p className="text-slate-900 font-semibold break-all sm:break-words leading-snug">{selected?.correo}</p>
+                                        <p className="text-slate-900 font-semibold break-all sm:break-words leading-snug">
+                                            {selected?.correo}
+                                        </p>
                                     </div>
                                 </div>
 
@@ -162,8 +197,10 @@ export default function SolicitudDetail({
                                         <button
                                             key={step}
                                             onClick={() => setGuideStep(step)}
-                                            className={`h-1.5 w-1.5 rounded-full transition-all ${guideStep === step ? "bg-primary w-3" : "bg-primary/20 hover:bg-primary/40"}`}
+                                            className={`h-1.5 w-1.5 rounded-full transition-all ${guideStep === step ? "bg-primary w-3" : "bg-primary/20 hover:bg-primary/40"
+                                                }`}
                                             aria-label={`Ir al paso ${step + 1}`}
+                                            type="button"
                                         />
                                     ))}
                                 </div>
@@ -173,7 +210,8 @@ export default function SolicitudDetail({
                                 {guideStep === 0 && (
                                     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                                         <p className="text-justify text-xs font-medium leading-relaxed text-slate-600">
-                                            En la lista vertical se resumen las citas solicitadas. Al presionar <strong>Confirmar</strong>, se envía un correo notificando al usuario.
+                                            En la lista vertical se resumen las citas solicitadas. Al presionar{" "}
+                                            <strong>Confirmar</strong>, se envía un correo notificando al usuario.
                                         </p>
                                     </div>
                                 )}
@@ -187,7 +225,8 @@ export default function SolicitudDetail({
                                 {guideStep === 2 && (
                                     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                                         <p className="text-justify text-xs font-medium leading-relaxed text-slate-600">
-                                            Para rechazar/cancelar, usa <strong>Rechazar</strong> e ingresa un motivo. Las notas internas quedan para el equipo.
+                                            Para rechazar/cancelar, usa <strong>Rechazar</strong> e ingresa un motivo. Las notas internas
+                                            quedan para el equipo.
                                         </p>
                                     </div>
                                 )}
@@ -197,6 +236,7 @@ export default function SolicitudDetail({
                                 <button
                                     onClick={() => setGuideStep((p) => (p + 1) % 3)}
                                     className="text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/70 transition-colors flex items-center gap-1"
+                                    type="button"
                                 >
                                     Siguiente <span className="material-symbols-outlined text-xs">arrow_forward</span>
                                 </button>
@@ -216,7 +256,7 @@ export default function SolicitudDetail({
                         onOpenReject?.();
                     }}
                     className={`px-8 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center gap-2 transition-all
-                        ${disableReject
+            ${disableReject
                             ? "opacity-50 cursor-not-allowed text-slate-400 bg-transparent"
                             : "text-slate-500 hover:text-red-700 hover:bg-red-50"
                         }`}
@@ -234,7 +274,7 @@ export default function SolicitudDetail({
                             onOpenReprog?.();
                         }}
                         className={`px-8 py-3 rounded-xl border font-bold text-xs uppercase tracking-widest flex items-center gap-2 shadow-sm transition-all
-                            ${disableReprogram
+              ${disableReprogram
                                 ? "opacity-50 cursor-not-allowed bg-white border-slate-200 text-slate-400"
                                 : "bg-white border-slate-300 text-brand-gray hover:border-primary hover:text-primary"
                             }`}
@@ -251,7 +291,7 @@ export default function SolicitudDetail({
                             onOpenConfirm?.();
                         }}
                         className={`px-12 py-4 rounded-xl font-bold text-xs uppercase tracking-[0.2em] flex items-center gap-2 transition-all shadow-xl
-                            ${disableConfirm
+              ${disableConfirm
                                 ? "opacity-50 cursor-not-allowed bg-slate-300 text-white shadow-none"
                                 : "bg-primary text-white hover:bg-black shadow-primary/30"
                             }`}
@@ -268,7 +308,7 @@ export default function SolicitudDetail({
                             onOpenRealizar?.();
                         }}
                         className={`px-10 py-4 rounded-xl font-bold text-xs uppercase tracking-[0.2em] flex items-center gap-2 transition-all shadow-xl
-                            ${disableRealizar
+              ${disableRealizar
                                 ? "opacity-50 cursor-not-allowed bg-slate-300 text-white shadow-none"
                                 : "bg-sky-700 text-white hover:bg-sky-900 shadow-sky-700/20"
                             }`}
