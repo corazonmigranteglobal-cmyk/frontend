@@ -2,11 +2,15 @@
 import React, { useMemo } from "react";
 
 function normalizePhoneForWhatsApp(raw) {
-  const s = String(raw || "");
-  // wa.me requires digits only (country code included)
-  const digits = s.replace(/\D+/g, "");
-  return digits.length ? digits : "";
+  let d = String(raw || "").replace(/[^\d]/g, "");
+
+  if (d.startsWith("00")) d = d.slice(2);
+
+  if (d.startsWith("5910")) d = "591" + d.slice(4);
+
+  return d;
 }
+
 
 export default function WhatsAppFab({ phone, message = "Quiero agendar una cita", labels }) {
   const waPhone = useMemo(() => normalizePhoneForWhatsApp(phone), [phone]);
@@ -14,7 +18,7 @@ export default function WhatsAppFab({ phone, message = "Quiero agendar una cita"
   const href = useMemo(() => {
     if (!waPhone) return "";
     const text = encodeURIComponent(String(message || ""));
-    return `https://wa.me/${waPhone}?text=${text}`;
+    return `https://api.whatsapp.com/send?phone=${waPhone}&text=${text}`;
   }, [waPhone, message]);
 
   if (!href) return null;

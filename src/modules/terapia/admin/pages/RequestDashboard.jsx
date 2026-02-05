@@ -116,6 +116,7 @@ export default function RequestDashboard({ session, onLogout, activeTab, onNavig
                     )}
 
                     <SolicitudDetail
+                        variant={viewMode}
                         selected={selected}
                         className={viewMode === "agenda" ? "col-span-12 lg:col-span-4" : "col-span-12 lg:col-span-8"}
                         guideStep={guideStep}

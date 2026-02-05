@@ -1,6 +1,5 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useSession } from "../../../../app/auth/SessionContext";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useBooking } from "../hooks/useBooking";
 
 /**
@@ -11,9 +10,7 @@ import { useBooking } from "../hooks/useBooking";
  * 3. Selección de fecha/hora
  * 4. Confirmación
  */
-export default function BookingPage({ overridePacienteId = null } = {}) {
-    const navigate = useNavigate();
-    const { session } = useSession();
+export default function BookingPage({ overridePacienteId = null, returnTo = "/paciente/dashboard" } = {}) {
     const {
         loading,
         error,
@@ -22,7 +19,9 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
         getBookingBootstrap,
         getDisponibilidad,
         registrarCita,
-    } = useBooking({ overridePacienteId });const [step, setStep] = useState(1);
+    } = useBooking({ overridePacienteId });
+
+    const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
         enfoque: null,
         producto: null,
@@ -32,6 +31,7 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
         horaFin: "",
         notas: "",
     });
+
     const [submitLoading, setSubmitLoading] = useState(false);
     const [submitError, setSubmitError] = useState(null);
     const [success, setSuccess] = useState(false);
@@ -39,14 +39,14 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
     // Load bootstrap data on mount
     useEffect(() => {
         getBookingBootstrap(true).catch(console.error);
-    }, []);
+    }, [getBookingBootstrap]);
 
     // Load availability when terapeuta changes or when entering step 3
     useEffect(() => {
         if (formData.terapeuta?.id_usuario && step === 3) {
             getDisponibilidad(formData.terapeuta.id_usuario).catch(console.error);
         }
-    }, [formData.terapeuta, step]);
+    }, [formData.terapeuta, step, getDisponibilidad]);
 
     const updateForm = useCallback((field, value) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
@@ -81,12 +81,15 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
     };
 
     // Group disponibilidad by date (all returned horarios are available)
-    const groupedHorarios = disponibilidad.reduce((acc, h) => {
-        if (!h.fecha) return acc;
-        if (!acc[h.fecha]) acc[h.fecha] = [];
-        acc[h.fecha].push(h);
-        return acc;
-    }, {});
+    const groupedHorarios = useMemo(() => {
+        const arr = Array.isArray(disponibilidad) ? disponibilidad : [];
+        return arr.reduce((acc, h) => {
+            if (!h?.fecha) return acc;
+            if (!acc[h.fecha]) acc[h.fecha] = [];
+            acc[h.fecha].push(h);
+            return acc;
+        }, {});
+    }, [disponibilidad]);
 
     // Success screen
     if (success) {
@@ -94,19 +97,36 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-gray-900 dark:via-gray-950 dark:to-black flex items-center justify-center p-4">
                 <div className="max-w-md w-full text-center">
                     <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-6">
-                        <span className="material-symbols-outlined text-green-600 dark:text-green-400 text-4xl">check_circle</span>
+                        <span className="material-symbols-outlined text-green-600 dark:text-green-400 text-4xl">
+                            check_circle
+                        </span>
                     </div>
+
                     <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-3">¡Cita Agendada!</h1>
                     <p className="text-slate-600 dark:text-slate-300 mb-2">
                         Tu cita ha sido registrada exitosamente.
                     </p>
+
                     <div className="bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-2xl p-4 mb-6">
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Fecha: <strong className="text-slate-800 dark:text-white">{formData.fecha}</strong></p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Hora: <strong className="text-slate-800 dark:text-white">{formData.horaInicio} - {formData.horaFin}</strong></p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Terapeuta: <strong className="text-slate-800 dark:text-white">{formData.terapeuta?.nombre || "Asignado"}</strong></p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Fecha: <strong className="text-slate-800 dark:text-white">{formData.fecha}</strong>
+                        </p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Hora:{" "}
+                            <strong className="text-slate-800 dark:text-white">
+                                {formData.horaInicio} - {formData.horaFin}
+                            </strong>
+                        </p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Terapeuta:{" "}
+                            <strong className="text-slate-800 dark:text-white">
+                                {formData.terapeuta?.nombre || "Asignado"}
+                            </strong>
+                        </p>
                     </div>
+
                     <Link
-                        to="/paciente/dashboard"
+                        to={returnTo}
                         className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition-colors"
                     >
                         <span className="material-symbols-outlined">home</span>
@@ -123,7 +143,10 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
             <header className="sticky top-0 z-50 backdrop-blur bg-white/70 dark:bg-black/50 border-b border-black/5 dark:border-white/10">
                 <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
-                        <Link to="/paciente/dashboard" className="flex items-center gap-2 text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition-colors">
+                        <Link
+                            to={returnTo}
+                            className="flex items-center gap-2 text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition-colors"
+                        >
                             <span className="material-symbols-outlined">arrow_back</span>
                             <span className="font-medium">Volver</span>
                         </Link>
@@ -143,8 +166,8 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
                         <div key={s} className="flex items-center flex-1">
                             <div
                                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step >= s
-                                    ? "bg-primary text-white"
-                                    : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                                        ? "bg-primary text-white"
+                                        : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
                                     }`}
                             >
                                 {step > s ? (
@@ -153,9 +176,12 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
                                     s
                                 )}
                             </div>
+
                             {s < 4 && (
-                                <div className={`flex-1 h-1 mx-2 rounded-full transition-colors ${step > s ? "bg-primary" : "bg-slate-200 dark:bg-slate-700"
-                                    }`} />
+                                <div
+                                    className={`flex-1 h-1 mx-2 rounded-full transition-colors ${step > s ? "bg-primary" : "bg-slate-200 dark:bg-slate-700"
+                                        }`}
+                                />
                             )}
                         </div>
                     ))}
@@ -199,24 +225,28 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
                                 key={prod.id_producto}
                                 onClick={() => updateForm("producto", prod)}
                                 className={`text-left p-5 rounded-2xl border transition-all ${formData.producto?.id_producto === prod.id_producto
-                                    ? "border-primary bg-primary/5 shadow-md"
-                                    : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
+                                        ? "border-primary bg-primary/5 shadow-md"
+                                        : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
                                     }`}
                             >
                                 <div className="flex items-start gap-4">
-                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${formData.producto?.id_producto === prod.id_producto
-                                        ? "bg-primary/20"
-                                        : "bg-slate-100 dark:bg-slate-800"
-                                        }`}>
+                                    <div
+                                        className={`w-12 h-12 rounded-xl flex items-center justify-center ${formData.producto?.id_producto === prod.id_producto
+                                                ? "bg-primary/20"
+                                                : "bg-slate-100 dark:bg-slate-800"
+                                            }`}
+                                    >
                                         <span className="material-symbols-outlined text-primary">spa</span>
                                     </div>
+
                                     <div className="flex-1">
                                         <h3 className="font-bold text-slate-800 dark:text-white mb-1">{prod.nombre}</h3>
-                                        <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">{prod.descripcion || "Sesión de terapia individual"}</p>
-                                        {prod.precio && (
-                                            <p className="mt-2 text-sm font-semibold text-primary">${prod.precio}</p>
-                                        )}
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">
+                                            {prod.descripcion || "Sesión de terapia individual"}
+                                        </p>
+                                        {prod.precio && <p className="mt-2 text-sm font-semibold text-primary">${prod.precio}</p>}
                                     </div>
+
                                     {formData.producto?.id_producto === prod.id_producto && (
                                         <span className="material-symbols-outlined text-primary">check_circle</span>
                                     )}
@@ -240,8 +270,8 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
                                 key={ter.id_usuario}
                                 onClick={() => updateForm("terapeuta", ter)}
                                 className={`text-left p-5 rounded-2xl border transition-all ${formData.terapeuta?.id_usuario === ter.id_usuario
-                                    ? "border-primary bg-primary/5 shadow-md"
-                                    : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
+                                        ? "border-primary bg-primary/5 shadow-md"
+                                        : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
                                     }`}
                             >
                                 <div className="flex items-start gap-4">
@@ -249,8 +279,12 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
                                         <span className="material-symbols-outlined text-primary text-2xl">person</span>
                                     </div>
                                     <div className="flex-1">
-                                        <h3 className="font-bold text-slate-800 dark:text-white mb-1">{ter.nombre || `Terapeuta #${ter.id_usuario}`}</h3>
-                                        <p className="text-sm text-slate-500 dark:text-slate-400">{ter.especialidad || "Psicología clínica"}</p>
+                                        <h3 className="font-bold text-slate-800 dark:text-white mb-1">
+                                            {ter.nombre || `Terapeuta #${ter.id_usuario}`}
+                                        </h3>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                                            {ter.especialidad || "Psicología clínica"}
+                                        </p>
                                         {ter.enfoque && (
                                             <span className="inline-block mt-2 px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
                                                 {ter.enfoque}
@@ -277,7 +311,10 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
                     <div className="space-y-6">
                         {Object.keys(groupedHorarios).length > 0 ? (
                             Object.entries(groupedHorarios).map(([fecha, horarios]) => (
-                                <div key={fecha} className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/5 overflow-hidden">
+                                <div
+                                    key={fecha}
+                                    className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/5 overflow-hidden"
+                                >
                                     <div className="px-5 py-3 bg-slate-50 dark:bg-white/5 border-b border-black/5 dark:border-white/10">
                                         <h3 className="font-semibold text-slate-800 dark:text-white">
                                             {new Date(fecha + "T12:00:00").toLocaleDateString("es-ES", {
@@ -298,8 +335,8 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
                                                     updateForm("horaFin", h.hora_fin);
                                                 }}
                                                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${formData.fecha === h.fecha && formData.horaInicio === h.hora_inicio
-                                                    ? "bg-primary text-white shadow-md"
-                                                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-primary/10"
+                                                        ? "bg-primary text-white shadow-md"
+                                                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-primary/10"
                                                     }`}
                                             >
                                                 {h.hora_inicio} - {h.hora_fin}
@@ -331,7 +368,9 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
                                     <span className="material-symbols-outlined text-primary">spa</span>
                                     <div>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">Servicio</p>
-                                        <p className="font-semibold text-slate-800 dark:text-white">{formData.producto?.nombre || "No seleccionado"}</p>
+                                        <p className="font-semibold text-slate-800 dark:text-white">
+                                            {formData.producto?.nombre || "No seleccionado"}
+                                        </p>
                                     </div>
                                 </div>
 
@@ -339,7 +378,9 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
                                     <span className="material-symbols-outlined text-primary">person</span>
                                     <div>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">Terapeuta</p>
-                                        <p className="font-semibold text-slate-800 dark:text-white">{formData.terapeuta?.nombre || "No seleccionado"}</p>
+                                        <p className="font-semibold text-slate-800 dark:text-white">
+                                            {formData.terapeuta?.nombre || "No seleccionado"}
+                                        </p>
                                     </div>
                                 </div>
 
@@ -348,14 +389,18 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
                                     <div>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">Fecha y Hora</p>
                                         <p className="font-semibold text-slate-800 dark:text-white">
-                                            {formData.fecha ? new Date(formData.fecha + "T12:00:00").toLocaleDateString("es-ES", {
-                                                weekday: "long",
-                                                year: "numeric",
-                                                month: "long",
-                                                day: "numeric",
-                                            }) : "No seleccionado"}
+                                            {formData.fecha
+                                                ? new Date(formData.fecha + "T12:00:00").toLocaleDateString("es-ES", {
+                                                    weekday: "long",
+                                                    year: "numeric",
+                                                    month: "long",
+                                                    day: "numeric",
+                                                })
+                                                : "No seleccionado"}
                                         </p>
-                                        <p className="text-sm text-slate-600 dark:text-slate-300">{formData.horaInicio} - {formData.horaFin}</p>
+                                        <p className="text-sm text-slate-600 dark:text-slate-300">
+                                            {formData.horaInicio} - {formData.horaFin}
+                                        </p>
                                     </div>
                                 </div>
 
@@ -409,8 +454,8 @@ export default function BookingPage({ overridePacienteId = null } = {}) {
                             onClick={prevStep}
                             disabled={step === 1}
                             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${step === 1
-                                ? "opacity-50 cursor-not-allowed text-slate-400"
-                                : "text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10"
+                                    ? "opacity-50 cursor-not-allowed text-slate-400"
+                                    : "text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10"
                                 }`}
                         >
                             <span className="material-symbols-outlined">arrow_back</span>
