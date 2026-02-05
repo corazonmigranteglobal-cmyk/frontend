@@ -4,7 +4,7 @@ import React, { useCallback, useMemo } from "react";
 function normalizePhoneForWhatsApp(raw) {
   let d = String(raw || "").replace(/[^\d]/g, ""); // solo dígitos
 
-  // normaliza prefijo internacional tipo 00
+  // normaliza prefijo internacional "00"
   if (d.startsWith("00")) d = d.slice(2);
 
   // normaliza casos tipo 5910XXXXXXXX (0 extra después del país)
@@ -13,37 +13,54 @@ function normalizePhoneForWhatsApp(raw) {
   return d;
 }
 
-function buildWaMeHref(phoneDigits, message) {
-  if (!phoneDigits) return "";
-  const text = encodeURIComponent(String(message || "Quiero agendar una cita"));
-  // IMPORTANTE: wa.me debe llevar SOLO dígitos, sin "+"
-  return `https://wa.me/${phoneDigits}?text=${text}`;
-}
-
-export default function WhatsAppFab({ phone, message = "Quiero agendar una cita", labels }) {
+export default function WhatsAppFab({
+  phone,
+  message = "Quiero agendar una cita",
+  labels,
+}) {
   const waPhone = useMemo(() => normalizePhoneForWhatsApp(phone), [phone]);
 
-  const href = useMemo(() => buildWaMeHref(waPhone, message), [waPhone, message]);
+  const text = useMemo(
+    () => encodeURIComponent(String(message || "")),
+    [message]
+  );
+
+  // 1) Deep link directo a la app (más confiable en iOS)
+  const appHref = useMemo(() => {
+    if (!waPhone) return "";
+    return `whatsapp://send?phone=${waPhone}&text=${text}`;
+  }, [waPhone, text]);
+
+  // 2) Fallback web (si no abre la app)
+  const webHref = useMemo(() => {
+    if (!waPhone) return "";
+    return `https://wa.me/${waPhone}?text=${text}`;
+  }, [waPhone, text]);
 
   const onClick = useCallback(
     (e) => {
-      // En iOS, a veces target _blank / nuevas pestañas rompen el handoff.
-      // Forzamos navegación directa para máxima compatibilidad.
       e.preventDefault();
-      if (!href) return;
-      window.location.href = href;
+      if (!waPhone) return;
+
+      // Intento 1: abrir app
+      window.location.href = appHref;
+
+      // Fallback: si no abre (WhatsApp no instalado o bloqueado), abre web
+      setTimeout(() => {
+        window.location.href = webHref;
+      }, 700);
     },
-    [href]
+    [waPhone, appHref, webHref]
   );
 
-  if (!href) return null;
+  if (!waPhone) return null;
 
   const ariaLabel = labels?.aria_label || "WhatsApp";
   const title = labels?.title || "WhatsApp";
 
   return (
     <a
-      href={href}
+      href={webHref}
       onClick={onClick}
       className="fixed bottom-6 right-20 p-3 rounded-full bg-primary text-white shadow-soft hover:bg-primary-light transition-colors focus:outline-none z-50 dark:bg-white dark:text-primary"
       aria-label={ariaLabel}

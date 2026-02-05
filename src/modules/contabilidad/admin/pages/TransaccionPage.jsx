@@ -4,6 +4,23 @@ import { useTransaccionesAdmin } from "../hooks/useTransaccionesAdmin";
 import { useProductosAdmin } from "../../../productos/admin/hooks/useProductosAdmin";
 import PaginationControls from "../components/PaginationControls";
 
+// ✅ Citas realizadas (para VENTA -> vincular a cita)
+import { TERAPIA_ENDPOINTS } from "../../../terapia/config/TERAPIA_ENDPOINTS";
+import { createApiConn } from "../../../../helpers/api_conn_factory";
+
+function normalizeEstado(v) {
+    const s = (v ?? "")
+        .toString()
+        .trim()
+        .toUpperCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, ""); // quita tildes
+    // Mapeos frecuentes
+    if (s === "REALIZADO") return "REALIZADA";
+    if (s === "DONE") return "REALIZADA";
+    return s;
+}
+
 function money(n) {
     const v = Number(n) || 0;
     return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -76,6 +93,85 @@ export default function TransaccionPage({ session }) {
     const [activeId, setActiveId] = useState(null);
     const [draft, setDraft] = useState(buildEmptyDraft);
     const [isSaving, setIsSaving] = useState(false);
+
+    // ✅ Citas realizadas
+    const [citasRealizadas, setCitasRealizadas] = useState([]);
+    const [isLoadingCitas, setIsLoadingCitas] = useState(false);
+    const [errorCitas, setErrorCitas] = useState("");
+
+    useEffect(() => {
+        let alive = true;
+
+        async function loadCitas() {
+            if (!session?.id_sesion) return;
+            setIsLoadingCitas(true);
+            setErrorCitas("");
+
+            try {
+                const payload = {
+                    p_actor_user_id: session?.user_id,
+                    p_id_sesion: session?.id_sesion,
+                    p_limit: 500,
+                    p_offset: 0,
+                };
+
+                // ✅ Debe traer las citas disponibles con el endpoint listar/citas
+                // (tu config debe mapear TERAPIA_ENDPOINTS.CITAS_LISTAR a esa ruta)
+                const res = await createApiConn(TERAPIA_ENDPOINTS.CITAS_LISTAR, payload, "POST", session);
+
+                const rows = Array.isArray(res?.rows) ? res.rows : Array.isArray(res?.items) ? res.items : [];
+
+                // ✅ Filtrar solo las citas REALIZADAS
+                const realizadas = (rows || [])
+                    .filter((r) => normalizeEstado(r?.estado || r?.estado_cita || r?.register_status) === "REALIZADA")
+                    .map((r) => {
+                        const id = r?.id_cita ?? r?.id ?? r?.cita_id ?? null;
+                        const fecha = r?.fecha_programada ?? r?.fecha ?? r?.fecha_cita ?? "";
+                        const inicio = r?.inicio ?? r?.hora_inicio ?? r?.hora_desde ?? "";
+                        const fin = r?.fin ?? r?.hora_fin ?? r?.hora_hasta ?? "";
+                        const paciente = r?.paciente_nombre ?? r?.nombre_paciente ?? r?.paciente ?? r?.nombre ?? "";
+                        const terapeuta = r?.terapeuta_nombre ?? r?.nombre_terapeuta ?? r?.terapeuta ?? "";
+                        const producto = r?.producto_nombre ?? r?.nombre_producto ?? r?.producto ?? "";
+
+                        const parts = [];
+                        if (fecha) parts.push(fecha);
+                        if (inicio || fin) parts.push(`${inicio || ""}${inicio && fin ? "-" : ""}${fin || ""}`.trim());
+                        if (paciente) parts.push(paciente);
+                        if (producto) parts.push(producto);
+                        if (!paciente && terapeuta) parts.push(terapeuta);
+
+                        return {
+                            id: id ? Number(id) : null,
+                            label: `#${id ?? "?"}${parts.length ? " — " + parts.join(" · ") : ""}`,
+                            raw: r,
+                        };
+                    })
+                    .filter((x) => x.id);
+
+                if (!alive) return;
+
+                const sorted = [...realizadas].sort((a, b) =>
+                    String(b?.raw?.fecha_programada || b?.raw?.fecha || "").localeCompare(
+                        String(a?.raw?.fecha_programada || a?.raw?.fecha || "")
+                    )
+                );
+
+                setCitasRealizadas(sorted);
+            } catch (e) {
+                if (!alive) return;
+                setErrorCitas(e?.data?.error || e?.message || "Error al listar citas");
+                setCitasRealizadas([]);
+            } finally {
+                if (!alive) return;
+                setIsLoadingCitas(false);
+            }
+        }
+
+        loadCitas();
+        return () => {
+            alive = false;
+        };
+    }, [session?.id_sesion, session?.user_id]);
 
     const flatLines = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -445,11 +541,11 @@ export default function TransaccionPage({ session }) {
                                 count={transacciones.length}
                                 isLoading={isLoading}
                                 onPrev={() => setOffset((o) => Math.max(0, o - pageSize))}
-                                onNext={() => setOffset((o) => o + pageSize)}
-                                onLimitChange={(n) => {
-                                    setPageSize(n);
-                                    setOffset(0);
-                                }}
+                                onNext={() => setOffset((o) => o + pageSize))}
+                            onLimitChange={(n) => {
+                                setPageSize(n);
+                                setOffset(0);
+                            }}
                             />
                             <div className="flex items-center justify-between text-xs text-slate-500">
                                 <span>{flatLines.length} líneas (en esta página)</span>
@@ -536,7 +632,9 @@ export default function TransaccionPage({ session }) {
                                                     </option>
                                                 ))}
                                             </select>
-                                            {isLoadingProductos ? <p className="text-xs text-slate-400 mt-1">Cargando productos...</p> : null}
+                                            {isLoadingProductos ? (
+                                                <p className="text-xs text-slate-400 mt-1">Cargando productos...</p>
+                                            ) : null}
                                             {errorProductos ? <p className="text-xs text-red-600 mt-1">{errorProductos}</p> : null}
                                         </div>
 
@@ -558,12 +656,12 @@ export default function TransaccionPage({ session }) {
                                             />
                                         </div>
 
+                                        {/* ✅ reemplaza input por select con citas REALIZADAS */}
                                         <div className="md:col-span-3">
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">ID Cita (opcional)</label>
-                                            <input
-                                                type="number"
-                                                min={1}
-                                                className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                Cita realizada (opcional)
+                                            </label>
+                                            <select
                                                 value={draft.id_cita ?? ""}
                                                 onChange={(e) =>
                                                     setDraft((d) => ({
@@ -571,7 +669,20 @@ export default function TransaccionPage({ session }) {
                                                         id_cita: e.target.value ? Number(e.target.value) : null,
                                                     }))
                                                 }
-                                            />
+                                                className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
+                                            >
+                                                <option value="">- Sin cita -</option>
+                                                {(citasRealizadas || []).map((c) => (
+                                                    <option key={c.id} value={c.id}>
+                                                        {c.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+
+                                            {isLoadingCitas ? (
+                                                <p className="text-xs text-slate-400 mt-1">Cargando citas realizadas...</p>
+                                            ) : null}
+                                            {errorCitas ? <p className="text-xs text-red-600 mt-1">{errorCitas}</p> : null}
                                         </div>
                                     </>
                                 ) : null}

@@ -10,6 +10,7 @@ import PublicLoginPage from "../auth/PublicLoginPage";
 import PublicSignupPage from "../auth/PublicSignupPage";
 
 import HeroSection from "../components/landing/sections/HeroSection";
+import ImpactPanelSection from "../components/landing/sections/ImpactPanelSection";
 import MapSection from "../components/landing/sections/MapSection";
 import MissionSection from "../components/landing/sections/MissionSection";
 import EmotionsSection from "../components/landing/sections/EmotionsSection";
@@ -30,7 +31,7 @@ function smoothScrollToHash(href) {
 export default function LandingHome() {
   const [view, setView] = useState("landing"); // landing | login | signup
 
-  const { content, uiById, loading, error } = useLandingContent();
+  const { content, uiById, resolveUiUrl, loading, error } = useLandingContent();
 
   const runAction = useCallback((action, href) => {
     switch (action) {
@@ -111,6 +112,26 @@ if (loading && !content) {
   const navbar = content?.navbar;
   const hero = content?.hero;
   const sections = content?.sections || {};
+
+  // Nuevo contrato: presentation_section viene desde DB/JSON público
+  const presentationSection = content?.presentation_section || null;
+
+  // Fallback mínimo (solo si el backend aún no envía presentation_section)
+  const presentationFallback = {
+    badge: { icon: "favorite", text: "Acompañamiento emocional para migrantes" },
+    title: "Migrar no es solo cambiar de país",
+    subtitle: "Es cargar una historia entera en el pecho. Aquí puedes sostenerte, paso a paso.",
+    description: [
+      "Ansiedad, culpa migratoria y nostalgia",
+      "Atención online, confidencial y humana",
+      "Profesionales con enfoque clínico",
+    ],
+    primary_cta: { label: "Agendar una cita", action: "scroll_to_contacto", href: "#contacto" },
+    secondary_cta: { label: "Conocer emociones", action: "scroll_to_emociones", href: "#emociones" },
+    img: { id_ui: null, alt: "Personas caminando" , fallback_src: "" },
+    img_footer_text: "“Cuando migras, no te vas solo: te llevas tu gente, tu idioma y tu historia.”",
+  };
+
   const footer = content?.footer;
   const ui = content?.ui;
   const telefono = content?.telefono;
@@ -149,6 +170,12 @@ if (loading && !content) {
     <div id="inicio" className="bg-background-light dark:bg-background-dark transition-colors duration-300 antialiased">
       <ScrollProgress />
       <LandingNavbar data={navbar} uiById={uiById} onAction={runAction} />
+
+      <ImpactPanelSection
+        data={presentationSection || presentationFallback}
+        onAction={runAction}
+        resolveUiUrl={resolveUiUrl}
+      />
 
       <HeroSection data={hero} onAction={runAction} />
 
