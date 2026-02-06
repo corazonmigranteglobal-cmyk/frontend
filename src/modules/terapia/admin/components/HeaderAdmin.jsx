@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { computeAdminAccess } from "../../../../app/auth/adminAccess";
+import { useDynamicLogo } from "../../../../hooks/useDynamicLogo";
 
 export default function HeaderAdmin({
     session,
@@ -10,9 +12,15 @@ export default function HeaderAdmin({
     setContaModule = null,
 }) {
 
+    const { logoUrl } = useDynamicLogo({ idElemento: 1 });
+
     const adminName = useMemo(() => {
         const u = session?.user || session?.usuario || session?.data || {};
         return u?.nombre_completo || u?.nombre || u?.email || "Admin";
+    }, [session]);
+
+    const access = useMemo(() => {
+        return session?.admin_access || computeAdminAccess(session);
     }, [session]);
     const [isProductsMenuOpen, setIsProductsMenuOpen] = useState(false);
     const productsMenuRef = useRef(null);
@@ -64,7 +72,7 @@ export default function HeaderAdmin({
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
                         <img
-                            src="https://storage.googleapis.com/vistas_publicas_assets/global_assets/media/LOGO%20CORAZON%20MIGRANTE.png"
+                            src={logoUrl}
                             alt="Logo Corazón Migrante"
                             className="w-10 h-10 object-contain"
                             style={{ borderRadius: "25%" }}
@@ -81,44 +89,53 @@ export default function HeaderAdmin({
                 </div>
 
                 <nav className="hidden md:flex items-center gap-1">
-                    <button
-                        type="button"
-                        className={tabClass("solicitudes")}
-                        onClick={() => onNavigate?.("solicitudes")}
-                    >
-                        Solicitudes
-                    </button>
-
-                    <button
-                        type="button"
-                        className={tabClass("terapeutas")}
-                        onClick={() => onNavigate?.("terapeutas")}
-                    >
-                        Terapeutas
-                    </button>
-
-                    <button
-                        type="button"
-                        className={tabClass("usuarios")}
-                        onClick={() => onNavigate?.("usuarios")}
-                    >
-                        Usuarios
-                    </button>
-
-                    <button
-                        type="button"
-                        className={tabClass("miPerfil")}
-                        onClick={() => onNavigate?.("miPerfil")}
-                    >
-                        Mi perfil
-                    </button>
-
-                    {/* Contabilidad (con submenú: Cuenta / Grupo / Centro / Transacción) */}
-                    <div className="relative" ref={contaMenuRef}>
+                    {access?.solicitudes ? (
                         <button
                             type="button"
-                            className={tabClass("contabilidad")}
-                            onClick={() => {
+                            className={tabClass("solicitudes")}
+                            onClick={() => onNavigate?.("solicitudes")}
+                        >
+                            Solicitudes
+                        </button>
+                    ) : null}
+
+                    {access?.terapeutas ? (
+                        <button
+                            type="button"
+                            className={tabClass("terapeutas")}
+                            onClick={() => onNavigate?.("terapeutas")}
+                        >
+                            Terapeutas
+                        </button>
+                    ) : null}
+
+                    {access?.usuarios ? (
+                        <button
+                            type="button"
+                            className={tabClass("usuarios")}
+                            onClick={() => onNavigate?.("usuarios")}
+                        >
+                            Usuarios
+                        </button>
+                    ) : null}
+
+                    {access?.miPerfil ? (
+                        <button
+                            type="button"
+                            className={tabClass("miPerfil")}
+                            onClick={() => onNavigate?.("miPerfil")}
+                        >
+                            Mi perfil
+                        </button>
+                    ) : null}
+
+                    {/* Contabilidad (con submenú: Cuenta / Grupo / Centro / Transacción) */}
+                    {access?.contabilidad ? (
+                        <div className="relative" ref={contaMenuRef}>
+                            <button
+                                type="button"
+                                className={tabClass("contabilidad")}
+                                onClick={() => {
                                 // Keep only one dropdown open at a time
                                 setIsProductsMenuOpen(false);
 
@@ -133,16 +150,16 @@ export default function HeaderAdmin({
 
                                 // If already in contabilidad, just toggle the dropdown
                                 setIsContaMenuOpen((v) => !v);
-                            }}
-                        >
-                            <span className="inline-flex items-center gap-2">
-                                Contabilidad
-                                <span className="material-symbols-outlined text-[18px]">expand_more</span>
-                            </span>
-                        </button>
+                                }}
+                            >
+                                <span className="inline-flex items-center gap-2">
+                                    Contabilidad
+                                    <span className="material-symbols-outlined text-[18px]">expand_more</span>
+                                </span>
+                            </button>
 
-                        {isContaMenuOpen && (
-                            <div className="absolute left-0 mt-2 w-64 bg-white border border-slate-200 shadow-lg rounded-xl overflow-hidden z-50">
+                            {isContaMenuOpen && (
+                                <div className="absolute left-0 mt-2 w-64 bg-white border border-slate-200 shadow-lg rounded-xl overflow-hidden z-50">
                                 <button
                                     type="button"
                                     className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm"
@@ -208,20 +225,24 @@ export default function HeaderAdmin({
                                         <span className="text-[11px] text-slate-500">Libro diario</span>
                                     </div>
                                 </button>
-                            </div>
-                        )}
-                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ) : null}
 
 
-                    <button
-                        type="button"
-                        className={tabClass("vistasPublicas")}
-                        onClick={() => onNavigate?.("vistasPublicas")}
-                    >
-                        Vistas publicas
-                    </button>
+                    {access?.vistasPublicas ? (
+                        <button
+                            type="button"
+                            className={tabClass("vistasPublicas")}
+                            onClick={() => onNavigate?.("vistasPublicas")}
+                        >
+                            Vistas publicas
+                        </button>
+                    ) : null}
 
                     {/* Productos (con submenú: Enfoques / Productos) */}
+                    {access?.productos ? (
                     <div className="relative" ref={productsMenuRef}>
                         <button
                             type="button"
@@ -274,6 +295,7 @@ export default function HeaderAdmin({
                             </div>
                         )}
                     </div>
+                    ) : null}
                 </nav>
             </div>
 

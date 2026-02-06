@@ -3,25 +3,17 @@ import { createApiConn } from "../../../../helpers/api_conn_factory";
 import { CONTABILIDAD_ENDPOINT } from "../../../../config/CONTABILIDAD_ENDPOINT";
 
 function unwrapFnRow(res) {
-    // Formato típico de call_db cuando la función retorna jsonb:
-    // rows[0] = { fn_name: { ok, data, ... } }
     const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
     if (!r0 || typeof r0 !== "object") return null;
-
     const keys = Object.keys(r0);
     if (keys.length !== 1) return null;
-
     const v = r0[keys[0]];
     return v && typeof v === "object" ? v : null;
 }
 
 function assertDbOk(res) {
-    // Caso estándar del backend
-    if (res?.ok === false) {
-        throw new Error(res?.message || "Operación fallida");
-    }
+    if (res?.ok === false) throw new Error(res?.message || "Operación fallida");
 
-    // ✅ Caso A: funciones que devuelven TABLE(status,type_error,message,data)
     const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
     if (r0?.status) {
         if (String(r0.status).toLowerCase() !== "ok") {
@@ -32,7 +24,6 @@ function assertDbOk(res) {
         return res;
     }
 
-    // ✅ Caso B: funciones que devuelven jsonb y vienen envueltas en rows[0].fn_name
     const inner = unwrapFnRow(res);
     if (inner) {
         if (inner.ok === false) {
@@ -40,17 +31,16 @@ function assertDbOk(res) {
             err.data = res;
             throw err;
         }
-        // si inner.ok === true, está OK
         return res;
     }
 
-    // Si no reconocemos shape, devolvemos sin romper
     return res;
 }
 
 function getActorPayload(session) {
     return {
-        p_actor_user_id: session?.user_id ?? session?.usuario_id ?? session?.id_user ?? session?.id_usuario,
+        p_actor_user_id:
+            session?.user_id ?? session?.usuario_id ?? session?.id_user ?? session?.id_usuario,
         p_id_sesion: session?.id_sesion,
     };
 }
@@ -91,6 +81,7 @@ function writeCache(session, next) {
 function ensureCacheShape(session) {
     const key = getCacheKey(session);
     if (!key) return;
+
     if (!sessionStorage.getItem(key)) {
         writeCache(session, {
             cuentas: { byId: {} },
@@ -142,6 +133,10 @@ function mapTransaccionRow(r) {
     const movimientos = Array.isArray(r.movimientos) ? r.movimientos : [];
     const total_debe = movimientos.reduce((a, m) => a + (Number(m?.debe) || 0), 0);
     const total_haber = movimientos.reduce((a, m) => a + (Number(m?.haber) || 0), 0);
+
+    // ✅ IMPORTANTE: conservar "venta" porque tu API lo manda
+    const venta = r?.venta && typeof r.venta === "object" ? r.venta : null;
+
     return {
         id_transaccion: r.id_transaccion,
         fecha: toIsoDateInput(r.fecha),
@@ -161,6 +156,9 @@ function mapTransaccionRow(r) {
         })),
         total_debe,
         total_haber,
+
+        // ✅ NUEVO
+        venta,
     };
 }
 
@@ -233,16 +231,7 @@ export function useTransaccionesAdmin(session, { autoFetch = true, limit = 200 }
     );
 
     const registrarVenta = useCallback(
-        async ({
-            fecha,
-            glosa,
-            referencia_externa,
-            metadata,
-            movimientos,
-            cantidad,
-            id_producto,
-            id_cita = null,
-        }) => {
+        async ({ fecha, glosa, referencia_externa, metadata, movimientos, cantidad, id_producto, id_cita = null }) => {
             const endpoint = CONTABILIDAD_ENDPOINT?.CONTABILIDAD_TRANSACCION_VENTA_CREAR;
             if (!endpoint) throw new Error("Endpoint CONTABILIDAD_TRANSACCION_VENTA_CREAR no definido");
             if (!session?.id_sesion) throw new Error("Sesión inválida (id_sesion faltante)");
@@ -259,22 +248,15 @@ export function useTransaccionesAdmin(session, { autoFetch = true, limit = 200 }
                 ...(id_cita ? { p_id_cita: Number(id_cita) } : {}),
             };
 
-            // ✅ Importante: aplicar assertDbOk y luego “unwrap” del resultado para devolver algo consistente
             const res = assertDbOk(await createApiConn(endpoint, payload, "POST", session));
 
             const inner = unwrapFnRow(res);
             if (inner) {
-                if (inner.ok === false) {
-                    throw new Error(inner?.message || "No se pudo registrar la transacción de venta");
-                }
+                if (inner.ok === false) throw new Error(inner?.message || "No se pudo registrar la transacción de venta");
                 return { ok: true, data: inner.data ?? null, raw: res };
             }
 
-            // fallback: si algún día el back cambia a {ok,data}
-            if (res?.ok === false) {
-                throw new Error(res?.message || "No se pudo registrar la transacción de venta");
-            }
-
+            if (res?.ok === false) throw new Error(res?.message || "No se pudo registrar la transacción de venta");
             return { ok: true, data: res?.data ?? null, raw: res };
         },
         [session]

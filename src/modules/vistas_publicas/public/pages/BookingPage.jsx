@@ -5,10 +5,11 @@ import { useBooking } from "../hooks/useBooking";
 /**
  * Página de reserva de citas terapéuticas
  * Flujo paso a paso:
- * 1. Selección de enfoque/producto
- * 2. Selección de terapeuta
- * 3. Selección de fecha/hora
- * 4. Confirmación
+ * 1. Selección de producto
+ * 2. Selección de enfoque
+ * 3. Selección de terapeuta
+ * 4. Selección de fecha/hora
+ * 5. Confirmación
  */
 export default function BookingPage({ overridePacienteId = null, returnTo = null } = {}) {
     const navigate = useNavigate();
@@ -59,22 +60,65 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
         getBookingBootstrap(true).catch(console.error);
     }, [getBookingBootstrap]);
 
-    // Load availability when terapeuta changes or when entering step 3
+    // Carga disponibilidad SOLO si el bootstrap no trajo horarios por terapeuta (evita llamada innecesaria)
     useEffect(() => {
-        if (formData.terapeuta?.id_usuario && step === 3) {
-            getDisponibilidad(formData.terapeuta.id_usuario).catch(console.error);
+        const tid = formData.terapeuta?.id_usuario;
+        if (!tid) return;
+        if (step !== 4) return;
+
+        const map = bootstrapData?.horarios_disponibles_por_terapeuta;
+        const hasFromBootstrap = map && Object.prototype.hasOwnProperty.call(map, String(tid));
+
+        if (!hasFromBootstrap) {
+            getDisponibilidad(tid).catch(console.error);
         }
-    }, [formData.terapeuta, step, getDisponibilidad]);
+    }, [formData.terapeuta, step, getDisponibilidad, bootstrapData]);
 
-    const updateForm = useCallback((field, value) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
-    }, []);
+    const updateForm = useCallback(
+        (field, value) => {
+            setFormData((prev) => {
+                // resets encadenados cuando cambia algo "arriba" en el flujo
+                if (field === "producto") {
+                    return {
+                        ...prev,
+                        producto: value,
+                        // enfoque se setea afuera (onClick) para poder resolver default
+                        terapeuta: null,
+                        fecha: "",
+                        horaInicio: "",
+                        horaFin: "",
+                    };
+                }
+                if (field === "enfoque") {
+                    return {
+                        ...prev,
+                        enfoque: value,
+                        terapeuta: null,
+                        fecha: "",
+                        horaInicio: "",
+                        horaFin: "",
+                    };
+                }
+                if (field === "terapeuta") {
+                    return {
+                        ...prev,
+                        terapeuta: value,
+                        fecha: "",
+                        horaInicio: "",
+                        horaFin: "",
+                    };
+                }
+                return { ...prev, [field]: value };
+            });
+        },
+        []
+    );
 
-    const nextStep = () => setStep((s) => Math.min(s + 1, 4));
+    const nextStep = () => setStep((s) => Math.min(s + 1, 5));
     const prevStep = () => setStep((s) => Math.max(s - 1, 1));
 
     const handleSubmit = async () => {
-        if (!formData.terapeuta || !formData.producto || !formData.fecha || !formData.horaInicio) {
+        if (!formData.terapeuta || !formData.producto || !formData.enfoque || !formData.fecha || !formData.horaInicio) {
             setSubmitError("Por favor completa todos los campos requeridos.");
             return;
         }
@@ -85,6 +129,7 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
             await registrarCita({
                 idTerapeuta: formData.terapeuta.id_usuario,
                 idProducto: formData.producto.id_producto,
+                idEnfoque: formData.enfoque.id_enfoque,
                 fecha: formData.fecha,
                 horaInicio: formData.horaInicio,
                 horaFin: formData.horaFin,
@@ -98,16 +143,48 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
         }
     };
 
-    // Group disponibilidad by date (all returned horarios are available)
+    const slotsFromBootstrap = useMemo(() => {
+        const tid = formData.terapeuta?.id_usuario;
+        const map = bootstrapData?.horarios_disponibles_por_terapeuta;
+        if (!tid || !map) return [];
+        const raw = map[String(tid)];
+        if (!Array.isArray(raw)) return [];
+
+        // Normaliza a la misma forma que getDisponibilidad
+        return raw
+            .map((h) => {
+                const fecha = h?.fecha ? String(h.fecha).split("T")[0] : (h?.inicio ? String(h.inicio).split("T")[0] : null);
+                const inicio = h?.inicio || null;
+                const fin = h?.fin || null;
+                const hora_inicio = inicio
+                    ? new Date(inicio).toLocaleTimeString("es-ES", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: false,
+                    })
+                    : null;
+                const hora_fin = fin
+                    ? new Date(fin).toLocaleTimeString("es-ES", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: false,
+                    })
+                    : null;
+                return { ...h, fecha, hora_inicio, hora_fin, disponible: true };
+            })
+            .filter((x) => x.fecha && x.hora_inicio && x.hora_fin);
+    }, [bootstrapData, formData.terapeuta]);
+
+    // Group horarios by date (preferimos bootstrap para evitar llamada)
     const groupedHorarios = useMemo(() => {
-        const arr = Array.isArray(disponibilidad) ? disponibilidad : [];
+        const arr = (slotsFromBootstrap?.length ? slotsFromBootstrap : (Array.isArray(disponibilidad) ? disponibilidad : [])) || [];
         return arr.reduce((acc, h) => {
             if (!h?.fecha) return acc;
             if (!acc[h.fecha]) acc[h.fecha] = [];
             acc[h.fecha].push(h);
             return acc;
         }, {});
-    }, [disponibilidad]);
+    }, [disponibilidad, slotsFromBootstrap]);
 
     // Success screen
     if (success) {
@@ -126,6 +203,32 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                     </p>
 
                     <div className="bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-2xl p-4 mb-6">
+                        <div className="flex items-center justify-center gap-3 mb-3">
+                            <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
+                                {formData.enfoque?.image_url ? (
+                                    <img
+                                        src={formData.enfoque.image_url}
+                                        alt={formData.enfoque?.nombre || "Enfoque"}
+                                        className="w-full h-full object-cover"
+                                        loading="lazy"
+                                    />
+                                ) : (
+                                    <span className="material-symbols-outlined text-primary">psychology</span>
+                                )}
+                            </div>
+                            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
+                                {formData.terapeuta?.image_url || formData.terapeuta?.foto_perfil_link ? (
+                                    <img
+                                        src={formData.terapeuta?.image_url || formData.terapeuta?.foto_perfil_link}
+                                        alt={formData.terapeuta?.nombre || "Terapeuta"}
+                                        className="w-full h-full object-cover"
+                                        loading="lazy"
+                                    />
+                                ) : (
+                                    <span className="material-symbols-outlined text-primary">person</span>
+                                )}
+                            </div>
+                        </div>
                         <p className="text-sm text-slate-500 dark:text-slate-400">
                             Fecha: <strong className="text-slate-800 dark:text-white">{formData.fecha}</strong>
                         </p>
@@ -139,6 +242,12 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                             Terapeuta:{" "}
                             <strong className="text-slate-800 dark:text-white">
                                 {formData.terapeuta?.nombre || "Asignado"}
+                            </strong>
+                        </p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Enfoque:{" "}
+                            <strong className="text-slate-800 dark:text-white">
+                                {formData.enfoque?.nombre || "Asignado"}
                             </strong>
                         </p>
                     </div>
@@ -182,7 +291,7 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
             {/* Progress Steps */}
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                 <div className="flex items-center justify-between mb-8">
-                    {[1, 2, 3, 4].map((s) => (
+                    {[1, 2, 3, 4, 5].map((s) => (
                         <div key={s} className="flex items-center flex-1">
                             <div
                                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step >= s
@@ -197,7 +306,7 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                 )}
                             </div>
 
-                            {s < 4 && (
+                            {s < 5 && (
                                 <div
                                     className={`flex-1 h-1 mx-2 rounded-full transition-colors ${step > s ? "bg-primary" : "bg-slate-200 dark:bg-slate-700"
                                         }`}
@@ -211,15 +320,17 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                 <div className="text-center mb-8">
                     <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">
                         {step === 1 && "Elige tu Servicio"}
-                        {step === 2 && "Selecciona un Terapeuta"}
-                        {step === 3 && "Elige Fecha y Hora"}
-                        {step === 4 && "Confirma tu Cita"}
+                        {step === 2 && "Elige el Enfoque"}
+                        {step === 3 && "Selecciona un Terapeuta"}
+                        {step === 4 && "Elige Fecha y Hora"}
+                        {step === 5 && "Confirma tu Cita"}
                     </h1>
                     <p className="text-slate-500 dark:text-slate-400">
-                        {step === 1 && "Explora nuestros enfoques y servicios disponibles."}
-                        {step === 2 && "Conoce a nuestros profesionales y elige el que mejor se adapte a ti."}
-                        {step === 3 && "Selecciona el horario que mejor te convenga."}
-                        {step === 4 && "Revisa los detalles antes de confirmar."}
+                        {step === 1 && "Selecciona el servicio que deseas reservar."}
+                        {step === 2 && "Elige el enfoque terapéutico para tu sesión."}
+                        {step === 3 && "Conoce a nuestros profesionales y elige el que mejor se adapte a ti."}
+                        {step === 4 && "Selecciona el horario que mejor te convenga."}
+                        {step === 5 && "Revisa los detalles antes de confirmar."}
                     </p>
                 </div>
 
@@ -243,7 +354,13 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                         {(bootstrapData?.productos || []).map((prod) => (
                             <button
                                 key={prod.id_producto}
-                                onClick={() => updateForm("producto", prod)}
+                                onClick={() => {
+                                    updateForm("producto", prod);
+                                    // set default enfoque del producto (si existe)
+                                    const idDef = prod?.id_enfoque_default;
+                                    const enf = (bootstrapData?.enfoques || []).find((e) => e?.id_enfoque === idDef) || null;
+                                    updateForm("enfoque", enf);
+                                }}
                                 className={`text-left p-5 rounded-2xl border transition-all ${formData.producto?.id_producto === prod.id_producto
                                         ? "border-primary bg-primary/5 shadow-md"
                                         : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
@@ -282,8 +399,59 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                     </div>
                 )}
 
-                {/* Step 2: Select Terapeuta */}
+                {/* Step 2: Select Enfoque */}
                 {step === 2 && !loading && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {(bootstrapData?.enfoques || []).map((enf) => {
+                            const img = enf?.image_url || enf?.foto_link || null;
+                            return (
+                                <button
+                                    key={enf.id_enfoque}
+                                    onClick={() => updateForm("enfoque", enf)}
+                                    className={`text-left p-5 rounded-2xl border transition-all ${formData.enfoque?.id_enfoque === enf.id_enfoque
+                                            ? "border-primary bg-primary/5 shadow-md"
+                                            : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
+                                        }`}
+                                >
+                                    <div className="flex items-start gap-4">
+                                        <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
+                                            {img ? (
+                                                <img
+                                                    src={img}
+                                                    alt={enf.nombre}
+                                                    className="w-full h-full object-cover"
+                                                    loading="lazy"
+                                                />
+                                            ) : (
+                                                <span className="material-symbols-outlined text-primary text-2xl">psychology</span>
+                                            )}
+                                        </div>
+
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-slate-800 dark:text-white mb-1">{enf.nombre}</h3>
+                                            <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">
+                                                {enf.descripcion || "Enfoque terapéutico"}
+                                            </p>
+                                        </div>
+
+                                        {formData.enfoque?.id_enfoque === enf.id_enfoque && (
+                                            <span className="material-symbols-outlined text-primary">check_circle</span>
+                                        )}
+                                    </div>
+                                </button>
+                            );
+                        })}
+
+                        {(!bootstrapData?.enfoques || bootstrapData.enfoques.length === 0) && (
+                            <div className="col-span-2 text-center py-12 text-slate-500">
+                                No hay enfoques disponibles en este momento.
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Step 3: Select Terapeuta */}
+                {step === 3 && !loading && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {(bootstrapData?.terapeutas || []).map((ter) => (
                             <button
@@ -295,8 +463,17 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                     }`}
                             >
                                 <div className="flex items-start gap-4">
-                                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                                        <span className="material-symbols-outlined text-primary text-2xl">person</span>
+                                    <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
+                                        {ter?.image_url || ter?.foto_perfil_link ? (
+                                            <img
+                                                src={ter?.image_url || ter?.foto_perfil_link}
+                                                alt={ter?.nombre || "Terapeuta"}
+                                                className="w-full h-full object-cover"
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <span className="material-symbols-outlined text-primary text-2xl">person</span>
+                                        )}
                                     </div>
                                     <div className="flex-1">
                                         <h3 className="font-bold text-slate-800 dark:text-white mb-1">
@@ -326,8 +503,8 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                     </div>
                 )}
 
-                {/* Step 3: Select Date/Time */}
-                {step === 3 && !loading && (
+                {/* Step 4: Select Date/Time */}
+                {step === 4 && !loading && (
                     <div className="space-y-6">
                         {Object.keys(groupedHorarios).length > 0 ? (
                             Object.entries(groupedHorarios).map(([fecha, horarios]) => (
@@ -379,17 +556,61 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                     </div>
                 )}
 
-                {/* Step 4: Confirmation */}
-                {step === 4 && (
+                {/* Step 5: Confirmation */}
+                {step === 5 && (
                     <div className="max-w-lg mx-auto">
                         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/5 overflow-hidden">
                             <div className="p-6 space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
+                                        {formData.enfoque?.image_url ? (
+                                            <img
+                                                src={formData.enfoque.image_url}
+                                                alt={formData.enfoque?.nombre || "Enfoque"}
+                                                className="w-full h-full object-cover"
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <span className="material-symbols-outlined text-primary">psychology</span>
+                                        )}
+                                    </div>
+                                    <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
+                                        {formData.terapeuta?.image_url || formData.terapeuta?.foto_perfil_link ? (
+                                            <img
+                                                src={formData.terapeuta?.image_url || formData.terapeuta?.foto_perfil_link}
+                                                alt={formData.terapeuta?.nombre || "Terapeuta"}
+                                                className="w-full h-full object-cover"
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <span className="material-symbols-outlined text-primary">person</span>
+                                        )}
+                                    </div>
+                                    <div className="text-sm text-slate-600 dark:text-slate-300">
+                                        <div className="font-semibold text-slate-800 dark:text-white line-clamp-1">
+                                            {formData.terapeuta?.nombre || "Terapeuta"}
+                                        </div>
+                                        <div className="text-slate-500 dark:text-slate-400 line-clamp-1">
+                                            {formData.enfoque?.nombre || "Enfoque"}
+                                        </div>
+                                    </div>
+                                </div>
                                 <div className="flex items-center gap-3">
                                     <span className="material-symbols-outlined text-primary">spa</span>
                                     <div>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">Servicio</p>
                                         <p className="font-semibold text-slate-800 dark:text-white">
                                             {formData.producto?.nombre || "No seleccionado"}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <span className="material-symbols-outlined text-primary">psychology</span>
+                                    <div>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">Enfoque</p>
+                                        <p className="font-semibold text-slate-800 dark:text-white">
+                                            {formData.enfoque?.nombre || "No seleccionado"}
                                         </p>
                                     </div>
                                 </div>
@@ -482,13 +703,14 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                             Anterior
                         </button>
 
-                        {step < 4 && (
+                        {step < 5 && (
                             <button
                                 onClick={nextStep}
                                 disabled={
                                     (step === 1 && !formData.producto) ||
-                                    (step === 2 && !formData.terapeuta) ||
-                                    (step === 3 && !formData.fecha)
+                                    (step === 2 && !formData.enfoque) ||
+                                    (step === 3 && !formData.terapeuta) ||
+                                    (step === 4 && !formData.fecha)
                                 }
                                 className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-primary text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
                             >

@@ -4,10 +4,7 @@ import { useTransaccionesAdmin } from "../hooks/useTransaccionesAdmin";
 import { useProductosAdmin } from "../../../productos/admin/hooks/useProductosAdmin";
 import PaginationControls from "../components/PaginationControls";
 
-// ✅ Ajusta este import SOLO si tu archivo vive en otro path.
-// Debe apuntar al archivo donde ya tienes: CITAS_SOLICITUDES_LISTAR: "/api/terapia/admin/citas/solicitudes/listar"
 import { TERAPIA_ENDPOINTS } from "../../../../config/TERAPIA_ENDPOINTS";
-
 import { createApiConn } from "../../../../helpers/api_conn_factory";
 
 function normalizeEstado(v) {
@@ -16,9 +13,7 @@ function normalizeEstado(v) {
         .trim()
         .toUpperCase()
         .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, ""); // quita tildes
-
-    // Normalizaciones comunes
+        .replace(/[\u0300-\u036f]/g, "");
     if (s === "REALIZADO") return "REALIZADA";
     return s;
 }
@@ -47,7 +42,6 @@ function buildEmptyDraft() {
         glosa: "",
         referencia_externa: "",
         metadata: {},
-        // Campos extra cuando tipo_transaccion === 'VENTA'
         cantidad: 1,
         id_producto: null,
         id_cita: null,
@@ -56,6 +50,57 @@ function buildEmptyDraft() {
             { id_cuenta: null, debe: 0, haber: 0, descripcion: "" },
         ],
     };
+}
+
+function isVentaTipo(t) {
+    return String(t || "").toUpperCase() === "VENTA";
+}
+
+function pickVentaCitaIdFromTransaccion(t) {
+    const v = t?.venta;
+    const id = v?.id_cita ?? v?.cita?.id_cita ?? null;
+    if (id) return Number(id);
+
+    const mid = t?.metadata?.id_cita ?? t?.metadata?.cita_id ?? null;
+    if (mid) return Number(mid);
+
+    return null;
+}
+
+function toTsFromCitaRaw(raw) {
+    const fecha = raw?.fecha_programada ?? raw?.fecha ?? raw?.fecha_cita ?? "";
+    const inicio = raw?.hora_inicio ?? raw?.inicio ?? raw?.hora_desde ?? "";
+    if (!fecha) return 0;
+
+    const iso = inicio
+        ? `${String(fecha).slice(0, 10)}T${String(inicio).slice(0, 5)}`
+        : `${String(fecha).slice(0, 10)}T00:00`;
+
+    const ts = Date.parse(iso);
+    return Number.isFinite(ts) ? ts : 0;
+}
+
+// ✅ label corto para cita en modo lectura (desde selected.venta.cita)
+function shortVentaCitaLabel(venta) {
+    const c = venta?.cita;
+    const id = venta?.id_cita ?? c?.id_cita ?? null;
+
+    if (!id) return "- Sin cita -";
+
+    const fecha = c?.fecha_programada || "";
+    const ini = c?.inicio ? String(c.inicio).slice(11, 16) : "";
+    const fin = c?.fin ? String(c.fin).slice(11, 16) : "";
+    const paciente = c?.paciente?.nombre_completo || c?.paciente?.nombre || "";
+    const estado = c?.estado || "";
+
+    const tramo = ini || fin ? `${ini}${ini && fin ? "-" : ""}${fin}` : "";
+    const parts = [];
+    if (fecha) parts.push(fecha);
+    if (tramo) parts.push(tramo);
+    if (paciente) parts.push(paciente);
+    if (estado) parts.push(estado);
+
+    return `#${id}${parts.length ? " — " + parts.join(" · ") : ""}`;
 }
 
 export default function TransaccionPage({ session }) {
@@ -69,7 +114,6 @@ export default function TransaccionPage({ session }) {
         return m;
     }, [cuentas]);
 
-    // Productos (para transacción de tipo VENTA)
     const { productos, isLoading: isLoadingProductos, error: errorProductos } = useProductosAdmin(session);
     const productosActivos = useMemo(
         () => (productos || []).filter((p) => (p?.register_status || "Activo") === "Activo"),
@@ -96,7 +140,9 @@ export default function TransaccionPage({ session }) {
     const [draft, setDraft] = useState(buildEmptyDraft);
     const [isSaving, setIsSaving] = useState(false);
 
-    // ✅ Citas realizadas (para VENTA)
+    const isReadOnly = !!activeId; // ✅ si estás viendo transacción existente → inmutable
+
+    // ✅ Citas realizadas (se cargan 1 vez)
     const [citasRealizadas, setCitasRealizadas] = useState([]);
     const [isLoadingCitas, setIsLoadingCitas] = useState(false);
     const [errorCitas, setErrorCitas] = useState("");
@@ -125,7 +171,6 @@ export default function TransaccionPage({ session }) {
                     session
                 );
 
-                // Soportar distintas formas de respuesta sin romper
                 const rows =
                     (Array.isArray(res?.rows) ? res.rows : null) ??
                     (Array.isArray(res?.items) ? res.items : null) ??
@@ -133,26 +178,23 @@ export default function TransaccionPage({ session }) {
                     (Array.isArray(res?.data?.items) ? res.data.items : null) ??
                     [];
 
-                // Filtrar solo REALIZADA
                 const realizadas = (rows || [])
                     .filter((r) => normalizeEstado(r?.estado || r?.estado_cita || r?.register_status) === "REALIZADA")
                     .map((r) => {
                         const id = r?.id_cita ?? r?.cita_id ?? r?.id ?? null;
 
-                        // Campos típicos
                         const fecha = r?.fecha_programada ?? r?.fecha ?? r?.fecha_cita ?? "";
                         const inicio = r?.hora_inicio ?? r?.inicio ?? r?.hora_desde ?? "";
                         const fin = r?.hora_fin ?? r?.fin ?? r?.hora_hasta ?? "";
                         const paciente = r?.paciente_nombre ?? r?.nombre_paciente ?? r?.paciente ?? r?.nombre ?? "";
-                        const terapeuta = r?.terapeuta_nombre ?? r?.nombre_terapeuta ?? r?.terapeuta ?? "";
                         const producto = r?.producto_nombre ?? r?.nombre_producto ?? r?.producto ?? "";
 
+                        // ✅ label más corto (sin ISO completo)
                         const parts = [];
                         if (fecha) parts.push(fecha);
                         if (inicio || fin) parts.push(`${inicio || ""}${inicio && fin ? "-" : ""}${fin || ""}`.trim());
                         if (paciente) parts.push(paciente);
                         if (producto) parts.push(producto);
-                        if (!paciente && terapeuta) parts.push(terapeuta);
 
                         return {
                             id: id ? Number(id) : null,
@@ -163,14 +205,7 @@ export default function TransaccionPage({ session }) {
                     .filter((x) => x.id);
 
                 if (!alive) return;
-
-                // Ordenar por fecha desc si viene en formato comparable
-                const sorted = [...realizadas].sort((a, b) =>
-                    String(b?.raw?.fecha_programada || b?.raw?.fecha || "").localeCompare(
-                        String(a?.raw?.fecha_programada || a?.raw?.fecha || "")
-                    )
-                );
-
+                const sorted = [...realizadas].sort((a, b) => toTsFromCitaRaw(b.raw) - toTsFromCitaRaw(a.raw));
                 setCitasRealizadas(sorted);
             } catch (e) {
                 if (!alive) return;
@@ -187,6 +222,24 @@ export default function TransaccionPage({ session }) {
             alive = false;
         };
     }, [session?.id_sesion, session?.user_id]);
+
+    // ✅ citas usadas = transacciones VENTA
+    const usedCitaIds = useMemo(() => {
+        const s = new Set();
+        for (const t of transacciones || []) {
+            if (!isVentaTipo(t?.tipo_transaccion)) continue;
+            const idCita = pickVentaCitaIdFromTransaccion(t);
+            if (idCita) s.add(idCita);
+        }
+        return s;
+    }, [transacciones]);
+
+    // ✅ citas realizadas NO usadas
+    const citasRealizadasNoUsadas = useMemo(() => {
+        return (citasRealizadas || [])
+            .filter((c) => c?.id && !usedCitaIds.has(Number(c.id)))
+            .sort((a, b) => toTsFromCitaRaw(b.raw) - toTsFromCitaRaw(a.raw));
+    }, [citasRealizadas, usedCitaIds]);
 
     const flatLines = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -224,19 +277,30 @@ export default function TransaccionPage({ session }) {
         return transacciones.find((t) => t.id_transaccion === activeId) || null;
     }, [transacciones, activeId]);
 
-    // Al seleccionar una transacción existente, la mostramos (solo lectura en el formulario)
+    // ✅ AL SELECCIONAR, llenar también datos de venta (inmutable)
     useEffect(() => {
         if (!selected) return;
+
+        const isVenta = isVentaTipo(selected.tipo_transaccion);
+        const venta = selected?.venta;
+
+        const selectedCantidad = isVenta ? Number(venta?.cantidad ?? 1) || 1 : 1;
+        const selectedProdId = isVenta
+            ? Number(venta?.id_producto ?? venta?.producto?.id_producto ?? null) || null
+            : null;
+        const selectedCitaId = isVenta
+            ? Number(venta?.id_cita ?? venta?.cita?.id_cita ?? null) || null
+            : null;
+
         setDraft({
             fecha: selected.fecha,
             tipo_transaccion: selected.tipo_transaccion,
             glosa: selected.glosa,
             referencia_externa: selected.referencia_externa,
             metadata: selected.metadata || {},
-            // Si el backend en el futuro expone detalle de venta, se podrá mapear acá.
-            cantidad: 1,
-            id_producto: null,
-            id_cita: null,
+            cantidad: selectedCantidad,
+            id_producto: selectedProdId,
+            id_cita: selectedCitaId,
             movimientos: (selected.movimientos || []).map((m) => ({
                 id_movimiento: m.id_movimiento ?? null,
                 id_cuenta: m.id_cuenta,
@@ -256,6 +320,7 @@ export default function TransaccionPage({ session }) {
     };
 
     const onAddLine = () => {
+        if (isReadOnly) return;
         setDraft((d) => ({
             ...d,
             movimientos: [...(d.movimientos || []), { id_cuenta: null, debe: 0, haber: 0, descripcion: "" }],
@@ -263,6 +328,7 @@ export default function TransaccionPage({ session }) {
     };
 
     const onRemoveLine = (idx) => {
+        if (isReadOnly) return;
         setDraft((d) => ({
             ...d,
             movimientos: (d.movimientos || []).filter((_, i) => i !== idx),
@@ -270,6 +336,7 @@ export default function TransaccionPage({ session }) {
     };
 
     const onChangeMov = (idx, patch) => {
+        if (isReadOnly) return;
         setDraft((d) => {
             const next = [...(d.movimientos || [])];
             next[idx] = { ...next[idx], ...patch };
@@ -278,6 +345,8 @@ export default function TransaccionPage({ session }) {
     };
 
     const onSave = async () => {
+        if (isReadOnly) return; // ✅ no permitir modificar transacciones existentes
+
         if (isSaving) return;
         if (!session?.id_sesion) {
             alert("Sesión inválida (id_sesion faltante)");
@@ -292,7 +361,7 @@ export default function TransaccionPage({ session }) {
             return;
         }
 
-        const isVenta = String(draft.tipo_transaccion || "").toUpperCase() === "VENTA";
+        const isVenta = isVentaTipo(draft.tipo_transaccion);
         if (isVenta) {
             if (!draft?.id_producto) {
                 alert("Para una VENTA debes seleccionar un producto (id_producto)");
@@ -303,9 +372,12 @@ export default function TransaccionPage({ session }) {
                 alert("Para una VENTA la cantidad debe ser mayor a 0");
                 return;
             }
+            if (draft.id_cita && usedCitaIds.has(Number(draft.id_cita))) {
+                alert("Esa cita ya está usada en una transacción de venta. Selecciona otra.");
+                return;
+            }
         }
 
-        // ✅ Normalizar + deduplicar antes de validar/enviar
         const movsRaw = (draft.movimientos || [])
             .filter((m) => m.id_cuenta)
             .map((m) => ({
@@ -339,17 +411,6 @@ export default function TransaccionPage({ session }) {
         if (debe <= 0) {
             alert("El total debe/haber debe ser mayor a 0");
             return;
-        }
-
-        // ✅ Detección del patrón típico de duplicación: múltiples HABER con mismo monto
-        const haberesPositivos = movs.filter((m) => (Number(m.haber) || 0) > 0);
-        if (haberesPositivos.length >= 2) {
-            const monto = Number(haberesPositivos[0].haber) || 0;
-            const allSame = haberesPositivos.every((h) => (Number(h.haber) || 0) === monto);
-            if (monto > 0 && allSame) {
-                alert("Tienes múltiples líneas en HABER con el mismo monto. Revisa duplicación (WF/Ingreso).");
-                return;
-            }
         }
 
         setIsSaving(true);
@@ -433,6 +494,15 @@ export default function TransaccionPage({ session }) {
             setIsSaving(false);
         }
     };
+
+    // ✅ para modo lectura: tomar la venta del seleccionado
+    const selectedVenta = selected?.venta || null;
+
+    // ✅ para modo lectura: construir label de cita desde el JSON que ya traes
+    const selectedVentaCitaLabel = useMemo(() => {
+        if (!selectedVenta) return "";
+        return shortVentaCitaLabel(selectedVenta);
+    }, [selectedVenta]);
 
     return (
         <main className="flex-grow p-0 max-w-screen-2xl mx-auto w-full">
@@ -554,7 +624,7 @@ export default function TransaccionPage({ session }) {
                                 count={transacciones.length}
                                 isLoading={isLoading}
                                 onPrev={() => setOffset((o) => Math.max(0, o - pageSize))}
-                                onNext={() => setOffset((o) => o + pageSize)}   // ✅ corregido
+                                onNext={() => setOffset((o) => o + pageSize)}
                                 onLimitChange={(n) => {
                                     setPageSize(n);
                                     setOffset(0);
@@ -583,7 +653,7 @@ export default function TransaccionPage({ session }) {
                                 <h2 className="text-xl font-semibold text-slate-800">Datos de la Transacción</h2>
                             </div>
                             <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded border border-slate-200">
-                                {activeId ? `#${activeId}` : "DRAFT-NEW"}
+                                {activeId ? `#${activeId} (solo lectura)` : "DRAFT-NEW"}
                             </span>
                         </div>
 
@@ -594,9 +664,10 @@ export default function TransaccionPage({ session }) {
                                         Fecha <span className="text-primary">*</span>
                                     </label>
                                     <input
-                                        className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
+                                        className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2 disabled:bg-slate-50"
                                         type="date"
                                         value={draft.fecha}
+                                        disabled={isReadOnly}
                                         onChange={(e) => setDraft((d) => ({ ...d, fecha: e.target.value }))}
                                     />
                                 </div>
@@ -607,8 +678,9 @@ export default function TransaccionPage({ session }) {
                                     </label>
                                     <select
                                         value={draft.tipo_transaccion}
+                                        disabled={isReadOnly}
                                         onChange={(e) => setDraft((d) => ({ ...d, tipo_transaccion: e.target.value }))}
-                                        className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
+                                        className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2 disabled:bg-slate-50"
                                     >
                                         <option value="">- Seleccionar -</option>
                                         <option value="VENTA">VENTA</option>
@@ -622,32 +694,42 @@ export default function TransaccionPage({ session }) {
                                     </select>
                                 </div>
 
-                                {String(draft.tipo_transaccion || "").toUpperCase() === "VENTA" ? (
+                                {/* ✅ Mostrar bloque VENTA también en modo lectura */}
+                                {isVentaTipo(draft.tipo_transaccion) ? (
                                     <>
                                         <div className="md:col-span-6">
                                             <label className="block text-sm font-medium text-slate-700 mb-1">
                                                 Producto <span className="text-primary">*</span>
                                             </label>
+
                                             <select
                                                 value={draft.id_producto || ""}
+                                                disabled={isReadOnly}
                                                 onChange={(e) =>
                                                     setDraft((d) => ({
                                                         ...d,
                                                         id_producto: e.target.value ? Number(e.target.value) : null,
                                                     }))
                                                 }
-                                                className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
+                                                className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2 disabled:bg-slate-50"
                                             >
                                                 <option value="">- Seleccionar producto -</option>
+
+                                                {/* ✅ En lectura, asegurar que el producto aparezca aunque no esté en productosActivos */}
+                                                {isReadOnly && selectedVenta?.producto?.id_producto ? (
+                                                    <option value={Number(selectedVenta.producto.id_producto)}>
+                                                        {selectedVenta.producto.nombre}
+                                                    </option>
+                                                ) : null}
+
                                                 {(productosActivos || []).map((p) => (
                                                     <option key={p.id} value={p.id}>
                                                         {p.nombre} {p.precio ? `— ${p.precio} ${p.moneda || ""}` : ""}
                                                     </option>
                                                 ))}
                                             </select>
-                                            {isLoadingProductos ? (
-                                                <p className="text-xs text-slate-400 mt-1">Cargando productos...</p>
-                                            ) : null}
+
+                                            {isLoadingProductos ? <p className="text-xs text-slate-400 mt-1">Cargando productos...</p> : null}
                                             {errorProductos ? <p className="text-xs text-red-600 mt-1">{errorProductos}</p> : null}
                                         </div>
 
@@ -658,7 +740,8 @@ export default function TransaccionPage({ session }) {
                                             <input
                                                 type="number"
                                                 min={1}
-                                                className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
+                                                disabled={isReadOnly}
+                                                className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2 disabled:bg-slate-50"
                                                 value={draft.cantidad ?? 1}
                                                 onChange={(e) =>
                                                     setDraft((d) => ({
@@ -669,34 +752,53 @@ export default function TransaccionPage({ session }) {
                                             />
                                         </div>
 
-                                        {/* ✅ Reemplazo del input por SELECT de citas realizadas */}
                                         <div className="md:col-span-3">
                                             <label className="block text-sm font-medium text-slate-700 mb-1">
                                                 Cita realizada (opcional)
                                             </label>
 
-                                            <select
-                                                value={draft.id_cita ?? ""}
-                                                onChange={(e) =>
-                                                    setDraft((d) => ({
-                                                        ...d,
-                                                        id_cita: e.target.value ? Number(e.target.value) : null,
-                                                    }))
-                                                }
-                                                className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
-                                            >
-                                                <option value="">- Sin cita -</option>
-                                                {(citasRealizadas || []).map((c) => (
-                                                    <option key={c.id} value={c.id}>
-                                                        {c.label}
+                                            {/* ✅ Modo lectura: mostrar la cita exacta de la venta, bloqueado */}
+                                            {isReadOnly ? (
+                                                <select
+                                                    value={draft.id_cita ?? ""}
+                                                    disabled
+                                                    className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm text-sm py-2 disabled:bg-slate-50"
+                                                >
+                                                    <option value={draft.id_cita ?? ""}>
+                                                        {selectedVentaCitaLabel || "- Sin cita -"}
                                                     </option>
-                                                ))}
-                                            </select>
+                                                </select>
+                                            ) : (
+                                                <select
+                                                    value={draft.id_cita ?? ""}
+                                                    onChange={(e) =>
+                                                        setDraft((d) => ({
+                                                            ...d,
+                                                            id_cita: e.target.value ? Number(e.target.value) : null,
+                                                        }))
+                                                    }
+                                                    className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2"
+                                                >
+                                                    <option value="">- Sin cita (o ya facturada) -</option>
+                                                    {(citasRealizadasNoUsadas || []).map((c) => (
+                                                        <option key={c.id} value={c.id}>
+                                                            {c.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            )}
 
-                                            {isLoadingCitas ? (
-                                                <p className="text-xs text-slate-400 mt-1">Cargando citas realizadas...</p>
+                                            {!isReadOnly ? (
+                                                <>
+                                                    {isLoadingCitas ? <p className="text-xs text-slate-400 mt-1">Cargando citas realizadas...</p> : null}
+                                                    {errorCitas ? <p className="text-xs text-red-600 mt-1">{errorCitas}</p> : null}
+                                                    {!isLoadingCitas && !errorCitas ? (
+                                                        <p className="text-[11px] text-slate-500 mt-1">
+                                                            Mostrando {citasRealizadasNoUsadas.length} citas realizadas no usadas.
+                                                        </p>
+                                                    ) : null}
+                                                </>
                                             ) : null}
-                                            {errorCitas ? <p className="text-xs text-red-600 mt-1">{errorCitas}</p> : null}
                                         </div>
                                     </>
                                 ) : null}
@@ -704,10 +806,11 @@ export default function TransaccionPage({ session }) {
                                 <div className="md:col-span-12">
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Concepto / Descripción</label>
                                     <input
-                                        className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2 placeholder-slate-400"
+                                        className="w-full rounded-md border-slate-300 bg-white text-slate-900 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 text-sm py-2 placeholder-slate-400 disabled:bg-slate-50"
                                         placeholder="Ej: Registro de donación en efectivo evento anual..."
                                         type="text"
                                         value={draft.glosa}
+                                        disabled={isReadOnly}
                                         onChange={(e) => setDraft((d) => ({ ...d, glosa: e.target.value }))}
                                     />
                                 </div>
@@ -715,15 +818,17 @@ export default function TransaccionPage({ session }) {
                         </div>
                     </div>
 
-                    {/* El resto del componente (tabla movimientos, footer, botones) queda igual */}
-                    {/* ... TU CÓDIGO ORIGINAL DESDE AQUÍ NO CAMBIA ... */}
+                    {/* Movimientos */}
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-grow flex flex-col overflow-hidden">
                         <div className="p-5 border-b border-slate-200 bg-rose-50/50 flex justify-between items-center">
                             <div className="flex items-center gap-2">
                                 <span className="material-symbols-outlined text-primary">table_chart</span>
                                 <h2 className="text-xl font-semibold text-slate-800">Movimientos Contables</h2>
                             </div>
-                            <button className="text-sm bg-white border border-primary/20 text-primary shadow-sm hover:bg-rose-50 transition-all px-4 py-2 rounded-md font-medium flex items-center gap-2">
+                            <button
+                                disabled={isReadOnly}
+                                className="text-sm bg-white border border-primary/20 text-primary shadow-sm hover:bg-rose-50 transition-all px-4 py-2 rounded-md font-medium flex items-center gap-2 disabled:opacity-50"
+                            >
                                 <span className="material-symbols-outlined text-[18px]">playlist_add</span> Importar Plantilla
                             </button>
                         </div>
@@ -765,10 +870,11 @@ export default function TransaccionPage({ session }) {
                                                 <td className="p-0 border-r border-slate-200 align-top relative">
                                                     <select
                                                         value={m.id_cuenta || ""}
+                                                        disabled={isReadOnly}
                                                         onChange={(e) =>
                                                             onChangeMov(idx, { id_cuenta: e.target.value ? Number(e.target.value) : null })
                                                         }
-                                                        className="w-full h-full text-sm border-0 bg-transparent px-4 py-3 pr-8 focus:bg-white focus:ring-inset focus:ring-2 focus:ring-primary transition-all text-slate-800 font-medium truncate"
+                                                        className="w-full h-full text-sm border-0 bg-transparent px-4 py-3 pr-8 focus:bg-white focus:ring-inset focus:ring-2 focus:ring-primary transition-all text-slate-800 font-medium truncate disabled:bg-slate-50"
                                                     >
                                                         <option value="">- Seleccionar cuenta -</option>
                                                         {cuentas.map((c) => (
@@ -784,23 +890,26 @@ export default function TransaccionPage({ session }) {
                                                 <td className="p-0 border-r border-slate-200 align-top bg-emerald-50/10">
                                                     <input
                                                         value={m.debe}
+                                                        disabled={isReadOnly}
                                                         onChange={(e) => onChangeMov(idx, { debe: e.target.value })}
-                                                        className="w-full h-full text-right font-medium text-emerald-800 border-0 bg-transparent px-4 py-3 focus:bg-white focus:ring-inset focus:ring-2 focus:ring-emerald-600 transition-all placeholder-slate-300"
+                                                        className="w-full h-full text-right font-medium text-emerald-800 border-0 bg-transparent px-4 py-3 focus:bg-white focus:ring-inset focus:ring-2 focus:ring-emerald-600 transition-all placeholder-slate-300 disabled:bg-slate-50"
                                                         placeholder="0.00"
                                                     />
                                                 </td>
                                                 <td className="p-0 border-r border-slate-200 align-top bg-blue-50/10">
                                                     <input
                                                         value={m.haber}
+                                                        disabled={isReadOnly}
                                                         onChange={(e) => onChangeMov(idx, { haber: e.target.value })}
-                                                        className="w-full h-full text-right text-blue-800 border-0 bg-transparent px-4 py-3 focus:bg-white focus:ring-inset focus:ring-2 focus:ring-blue-600 transition-all placeholder-slate-300"
+                                                        className="w-full h-full text-right text-blue-800 border-0 bg-transparent px-4 py-3 focus:bg-white focus:ring-inset focus:ring-2 focus:ring-blue-600 transition-all placeholder-slate-300 disabled:bg-slate-50"
                                                         placeholder="0.00"
                                                     />
                                                 </td>
                                                 <td className="p-0 text-center align-middle">
                                                     <button
                                                         onClick={() => onRemoveLine(idx)}
-                                                        className="w-8 h-8 inline-flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                                        disabled={isReadOnly}
+                                                        className="w-8 h-8 inline-flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-30"
                                                         title="Eliminar línea"
                                                     >
                                                         <span className="material-symbols-outlined text-[18px]">delete</span>
@@ -817,7 +926,8 @@ export default function TransaccionPage({ session }) {
                                             <button
                                                 type="button"
                                                 onClick={onAddLine}
-                                                className="w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:text-primary hover:border-primary hover:bg-rose-50 transition-all flex justify-center items-center gap-2 group"
+                                                disabled={isReadOnly}
+                                                className="w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:text-primary hover:border-primary hover:bg-rose-50 transition-all flex justify-center items-center gap-2 group disabled:opacity-50"
                                             >
                                                 <span className="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform">
                                                     add_circle
@@ -831,19 +941,28 @@ export default function TransaccionPage({ session }) {
                         </div>
 
                         <div className="p-6 bg-white border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 mt-auto">
-                            <div className="text-xs text-slate-500 italic">* Todos los cambios se guardan automáticamente en borrador.</div>
+                            <div className="text-xs text-slate-500 italic">
+                                {isReadOnly ? "* Transacción inmutable (solo lectura)." : "* Todos los cambios se guardan automáticamente en borrador."}
+                            </div>
+
                             <div className="flex gap-3 w-full sm:w-auto">
-                                <button className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 font-medium transition-colors text-sm">
-                                    Cancelar
-                                </button>
                                 <button
-                                    onClick={onSave}
-                                    disabled={isSaving || !isBalanced}
-                                    className={`flex-1 sm:flex-none px-8 py-2.5 rounded-lg ${isSaving || !isBalanced ? "bg-slate-300" : "bg-primary hover:bg-[#5a2634]"
-                                        } text-white shadow-md hover:shadow-lg transform active:scale-[0.98] transition-all font-semibold flex items-center justify-center gap-2 text-sm`}
+                                    onClick={onNew}
+                                    className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 font-medium transition-colors text-sm"
                                 >
-                                    <span className="material-symbols-outlined text-[20px]">save</span> Guardar Asiento
+                                    {isReadOnly ? "Volver a nuevo" : "Cancelar"}
                                 </button>
+
+                                {!isReadOnly ? (
+                                    <button
+                                        onClick={onSave}
+                                        disabled={isSaving || !isBalanced}
+                                        className={`flex-1 sm:flex-none px-8 py-2.5 rounded-lg ${isSaving || !isBalanced ? "bg-slate-300" : "bg-primary hover:bg-[#5a2634]"
+                                            } text-white shadow-md hover:shadow-lg transform active:scale-[0.98] transition-all font-semibold flex items-center justify-center gap-2 text-sm`}
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">save</span> Guardar Asiento
+                                    </button>
+                                ) : null}
                             </div>
                         </div>
                     </div>

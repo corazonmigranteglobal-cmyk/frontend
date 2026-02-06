@@ -3,8 +3,11 @@ function safeStr(v) {
 }
 
 export function mapTerapeutaPerfilToUI(apiData = {}, fallback = {}) {
-  const usuario = apiData?.usuario || {};
-  const terapeuta = apiData?.terapeuta || {};
+  // Back-end (Corazón Migrante) normalmente retorna:
+  // { usuario: {...}, usuario_terapeuta: {...} }
+  // pero mantenemos compatibilidad con otras variantes.
+  const usuario = apiData?.usuario || apiData?.user || apiData?.usuario_base || {};
+  const terapeuta = apiData?.usuario_terapeuta || apiData?.terapeuta || apiData?.profile || {};
 
   const pais = safeStr(terapeuta?.pais);
   const ciudad = safeStr(terapeuta?.ciudad);
@@ -15,21 +18,31 @@ export function mapTerapeutaPerfilToUI(apiData = {}, fallback = {}) {
     apellidos: safeStr(usuario?.apellido || fallback.apellidos),
     telefono: safeStr(usuario?.telefono || fallback.telefono),
 
-    fecha_nacimiento: safeStr(terapeuta?.fecha_nacimiento || terapeuta?.birth_date || fallback.fecha_nacimiento),
-    sexo: safeStr(terapeuta?.sexo || fallback.sexo),
+    // Estos campos viven en usuarios.usuario
+    fecha_nacimiento: safeStr(usuario?.fecha_nacimiento || usuario?.birth_date || fallback.fecha_nacimiento),
+    sexo: safeStr(usuario?.sexo || fallback.sexo),
 
     titulo_profesional: safeStr(terapeuta?.titulo_profesional || terapeuta?.titulo || fallback.titulo_profesional),
     especialidad_principal: safeStr(terapeuta?.especialidad_principal || terapeuta?.especialidad || fallback.especialidad_principal),
-    descripcion: safeStr(terapeuta?.descripcion || fallback.descripcion),
+    descripcion: safeStr(terapeuta?.descripcion_perfil || terapeuta?.descripcion || fallback.descripcion),
     frase_personal: safeStr(terapeuta?.frase_personal || terapeuta?.frase || fallback.frase_personal),
-    youtube_link: safeStr(terapeuta?.youtube_link || terapeuta?.link_video || fallback.youtube_link),
+    youtube_link: safeStr(terapeuta?.link_video_youtube || terapeuta?.youtube_link || terapeuta?.link_video || fallback.youtube_link),
     matricula_profesional: safeStr(terapeuta?.matricula_profesional || terapeuta?.matricula || fallback.matricula_profesional),
     valor_sesion_base: safeStr(terapeuta?.valor_sesion_base || terapeuta?.tarifa_base || fallback.valor_sesion_base),
 
     pais,
     ciudad,
 
-    foto_url: safeStr(terapeuta?.foto_url || terapeuta?.avatar_url || fallback.foto_url),
+    // La foto normalmente vive en usuarios.usuario (foto_perfil_link)
+    foto_url: safeStr(
+      usuario?.foto_perfil_link ||
+      usuario?.avatar_url ||
+      usuario?.link ||
+      usuario?.foto ||
+      terapeuta?.foto_url ||
+      terapeuta?.avatar_url ||
+      fallback.foto_url
+    ),
 
     raw: { usuario, terapeuta },
   };

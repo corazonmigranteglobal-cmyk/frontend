@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo } from "react";
 import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { useSession } from "../auth/SessionContext.jsx";
+import { canAccessAdminTab, getDefaultAdminPath } from "../auth/adminAccess";
 
 import RequestDashboard from "../../modules/terapia/admin/pages/RequestDashboard.jsx";
 import NuevaCitaAdminPage from "../../modules/terapia/admin/pages/NuevaCitaAdminPage.jsx";
@@ -88,129 +89,153 @@ export default function AdminLayout({ basePath = "/admin" }) {
     [session, logout, onNavigate]
   );
 
+  // Resolve the first allowed route (relative to this layout)
+  const defaultRelPath = useMemo(() => {
+    const abs = getDefaultAdminPath(session, basePath);
+    const prefix = `${bp}/`;
+    if (typeof abs === "string" && abs.startsWith(prefix)) return abs.slice(prefix.length);
+    // fallback (will still be guarded)
+    return "solicitudes";
+  }, [session, basePath, bp]);
+
+  function Guard({ allow, children }) {
+    if (canAccessAdminTab(session, allow)) return children;
+    return <Navigate to={defaultRelPath} replace />;
+  }
+
   return (
     <AdminOptionsProvider enabled={!!session}>
       <Routes>
-        <Route path="" element={<Navigate to="solicitudes" replace />} />
+        <Route path="" element={<Navigate to={defaultRelPath} replace />} />
 
         <Route
           path="solicitudes"
           element={
-            <RequestDashboard
-              {...commonPropsBase}
-              activeTab={"solicitudes"}
-              contaModule={"cuenta"}
-              setContaModule={null}
-            />
+            <Guard allow="solicitudes">
+              <RequestDashboard
+                {...commonPropsBase}
+                activeTab={"solicitudes"}
+                contaModule={"cuenta"}
+                setContaModule={null}
+              />
+            </Guard>
           }
         />
 
         <Route
           path="solicitudes/nueva-cita"
           element={
-            <NuevaCitaAdminPage
-              {...commonPropsBase}
-              activeTab={"solicitudes"}
-              contaModule={"cuenta"}
-              setContaModule={null}
-            />
+            <Guard allow="solicitudes">
+              <NuevaCitaAdminPage
+                {...commonPropsBase}
+                activeTab={"solicitudes"}
+                contaModule={"cuenta"}
+                setContaModule={null}
+              />
+            </Guard>
           }
         />
 
         <Route
           path="usuarios"
           element={
-            <UsersDashboard
-              {...commonPropsBase}
-              activeTab={"usuarios"}
-              contaModule={"cuenta"}
-              setContaModule={null}
-            />
+            <Guard allow="usuarios">
+              <UsersDashboard
+                {...commonPropsBase}
+                activeTab={"usuarios"}
+                contaModule={"cuenta"}
+                setContaModule={null}
+              />
+            </Guard>
           }
         />
 
         <Route
           path="mi-perfil"
           element={
-            <MiPerfilDashboard
-              {...commonPropsBase}
-              activeTab={"miPerfil"}
-              contaModule={"cuenta"}
-              setContaModule={null}
-            />
+            <Guard allow="miPerfil">
+              <MiPerfilDashboard
+                {...commonPropsBase}
+                activeTab={"miPerfil"}
+                contaModule={"cuenta"}
+                setContaModule={null}
+              />
+            </Guard>
           }
         />
 
         <Route
           path="terapeutas"
           element={
-            <TerapeutaPerfilDashboard
-              {...commonPropsBase}
-              activeTab={"terapeutas"}
-              contaModule={"cuenta"}
-              setContaModule={null}
-            />
+            <Guard allow="terapeutas">
+              <TerapeutaPerfilDashboard
+                {...commonPropsBase}
+                activeTab={"terapeutas"}
+                contaModule={"cuenta"}
+                setContaModule={null}
+              />
+            </Guard>
           }
         />
 
         <Route
           path="vistas-publicas"
           element={
-            <VistasPublicasDashboard
-              {...commonPropsBase}
-              activeTab={"vistasPublicas"}
-              contaModule={"cuenta"}
-              setContaModule={null}
-            />
+            <Guard allow="vistasPublicas">
+              <VistasPublicasDashboard
+                {...commonPropsBase}
+                activeTab={"vistasPublicas"}
+                contaModule={"cuenta"}
+                setContaModule={null}
+              />
+            </Guard>
           }
         />
 
         <Route
           path="productos/enfoques"
           element={
-            <EnfoquesDashboard
-              {...commonPropsBase}
-              activeTab={"productos_enfoques"}
-              contaModule={"cuenta"}
-              setContaModule={null}
-            />
+            <Guard allow="productos">
+              <EnfoquesDashboard
+                {...commonPropsBase}
+                activeTab={"productos_enfoques"}
+                contaModule={"cuenta"}
+                setContaModule={null}
+              />
+            </Guard>
           }
         />
 
         <Route
           path="productos/productos"
           element={
-            <ProductosDashboard
-              {...commonPropsBase}
-              activeTab={"productos_productos"}
-              contaModule={"cuenta"}
-              setContaModule={null}
-            />
+            <Guard allow="productos">
+              <ProductosDashboard
+                {...commonPropsBase}
+                activeTab={"productos_productos"}
+                contaModule={"cuenta"}
+                setContaModule={null}
+              />
+            </Guard>
           }
         />
 
-        <Route
-          path="contabilidad"
-          element={
-            <Navigate
-              to={`${String(basePath || "/admin").replace(/\/+$/, "")}/contabilidad/cuenta`}
-              replace
-            />
-          }
-        />
+        <Route path="contabilidad" element={<Navigate to="contabilidad/cuenta" replace />} />
 
         <Route
           path="contabilidad/:module"
           element={
-            <ContabilidadRoute
-              basePath={basePath}
-              commonProps={{ ...commonPropsBase, activeTab: "contabilidad" }}
-            />
+            <Guard allow="contabilidad">
+              <ContabilidadRoute
+                basePath={basePath}
+                commonProps={{ ...commonPropsBase, activeTab: "contabilidad" }}
+              />
+            </Guard>
           }
         />
 
         {/* Unknown admin routes */}
-        <Route path="*" element={<Navigate to="solicitudes" replace />} />
+        <Route path="*" element={<Navigate to={defaultRelPath} replace />} />
       </Routes>
     </AdminOptionsProvider>
   );

@@ -229,16 +229,31 @@ export default function PerfilForm({
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 ml-1">Correo electrónico</label>
+            <div className="space-y-2 relative group">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-700 ml-1">Correo electrónico</label>
+
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-slate-300 text-slate-600 text-[12px] cursor-help">
+                  i
+                </span>
+              </div>
+
+              <div
+                className="pointer-events-none absolute left-1 top-0 -translate-y-3 opacity-0 group-hover:opacity-100 transition
+               bg-slate-900 text-white text-xs px-3 py-2 rounded-lg shadow-lg"
+              >
+                Este campo no es modificable
+              </div>
+
               <input
                 className={INPUT}
                 type="email"
                 value={profile?.email || ""}
                 onChange={(e) => setField("email", e.target.value)}
-                disabled={loading || saving}
+                disabled={true}
               />
             </div>
+
 
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-700 ml-1">Teléfono</label>

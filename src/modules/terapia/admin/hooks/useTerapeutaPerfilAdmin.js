@@ -53,6 +53,14 @@ const DEFAULT_PROFILE = {
   foto_url: "",
 };
 
+function normalizeSexo(v) {
+  const s = (v ?? "").toString().trim();
+  if (!s) return null;
+  if (s === "F" || s.toLowerCase() === "f" || s.toLowerCase() === "femenino") return "F";
+  if (s === "M" || s.toLowerCase() === "m" || s.toLowerCase() === "masculino") return "M";
+  return s;
+}
+
 export function useTerapeutaPerfilAdmin(session, opts = {}) {
   const { type: userType } = useMemo(() => resolveUserType(session), [session]);
   const targetUserId = useMemo(() => {
@@ -203,6 +211,15 @@ export function useTerapeutaPerfilAdmin(session, opts = {}) {
   const buildPatch = (p) => {
     // OJO: keys deben coincidir con lo que espera tu backend
     return {
+      // ---- usuarios.usuario
+      telefono: safeStr(p?.telefono).trim() || null,
+      nombre: safeStr(p?.nombres).trim() || null,
+      apellido: safeStr(p?.apellidos).trim() || null,
+      fecha_nacimiento: safeStr(p?.fecha_nacimiento).trim() || null,
+      sexo: normalizeSexo(p?.sexo),
+      foto_perfil_link: safeStr(p?.foto_url || p?.avatar_url || p?.link || p?.foto).trim() || null,
+
+      // ---- usuarios.usuario_terapeuta
       titulo_profesional: safeStr(p?.titulo_profesional).trim() || null,
       especialidad_principal: safeStr(p?.especialidad_principal).trim() || null,
       descripcion_perfil: safeStr(p?.descripcion).trim() || null,
@@ -211,8 +228,6 @@ export function useTerapeutaPerfilAdmin(session, opts = {}) {
       matricula_profesional: safeStr(p?.matricula_profesional).trim() || null,
       pais: safeStr(p?.pais).trim() || null,
       ciudad: safeStr(p?.ciudad).trim() || null,
-      sexo: safeStr(p?.sexo).trim() || null,
-      foto_perfil_link: safeStr(p?.foto_url || p?.avatar_url || p?.link || p?.foto),
       valor_sesion_base:
         p?.valor_sesion_base === "" || p?.valor_sesion_base === null || p?.valor_sesion_base === undefined
           ? null

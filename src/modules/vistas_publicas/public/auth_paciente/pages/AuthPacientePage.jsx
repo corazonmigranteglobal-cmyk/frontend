@@ -6,6 +6,7 @@ import ConfirmActionModal from "../components/modals/ConfirmActionModal";
 import ActionResultModal from "../components/modals/ActionResultModal";
 import { createPortal } from "react-dom";
 import { ROUTES_FILE_SERVER } from "../../../../../config/ROUTES_FILE_SERVER";
+import { useDynamicLogo } from "../../../../../hooks/useDynamicLogo";
 
 /* =========================
    Small helpers
@@ -593,6 +594,8 @@ function AuthBenefits() {
 ========================= */
 function LeftAuthPanel({ isRegister }) {
   const [imgOk, setImgOk] = useState(true);
+  const [logoOk, setLogoOk] = useState(true);
+  const { logoUrl } = useDynamicLogo({ idElemento: 1 });
 
   const headline = isRegister
     ? "Un nuevo comienzo\naún es posible."
@@ -635,9 +638,21 @@ function LeftAuthPanel({ isRegister }) {
           {/* Top brand pill */}
           <div className="flex items-center justify-between">
             <div className="inline-flex items-center gap-2 rounded-2xl px-4 py-2 bg-white/10 border border-white/15 backdrop-blur mt-8 align-center">
-              <span className="material-symbols-outlined text-white text-[22px]">
-                favorite
-              </span>
+              {logoOk && logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt="Logo Corazón Migrante"
+                  className="w-6 h-6 object-contain"
+                  style={{ borderRadius: "35%" }}
+                  onError={() => setLogoOk(false)}
+                  loading="eager"
+                  decoding="async"
+                />
+              ) : (
+                <span className="material-symbols-outlined text-white text-[22px]">
+                  favorite
+                </span>
+              )}
               <span className="text-white/95 font-semibold tracking-tight">
                 Corazón de Migrante
               </span>

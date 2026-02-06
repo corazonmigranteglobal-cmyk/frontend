@@ -90,18 +90,7 @@ export default function SolicitudDetail({
                     </div>
                 </div>
 
-                {/* Botón "Más" solo en LISTA */}
-                {!isAgenda && (
-                    <div className="flex items-center gap-2">
-                        <button
-                            className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 transition-all rounded-xl border border-slate-100"
-                            title="Más"
-                            type="button"
-                        >
-                            <span className="material-symbols-outlined">more_vert</span>
-                        </button>
-                    </div>
-                )}
+
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6 sm:p-8 lg:p-10">

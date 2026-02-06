@@ -187,12 +187,13 @@ export function useBooking({ overridePacienteId = null } = {}) {
         async ({
             idTerapeuta,
             idProducto,
+            idEnfoque,
             fecha,
             horaInicio,
             horaFin,
             notas = "",
         }) => {
-            if (!idTerapeuta || !idProducto || !fecha || !horaInicio || !horaFin) {
+            if (!idTerapeuta || !idProducto || !idEnfoque || !fecha || !horaInicio || !horaFin) {
                 throw new Error("Faltan datos obligatorios para registrar la cita");
             }
 
@@ -210,13 +211,14 @@ export function useBooking({ overridePacienteId = null } = {}) {
                         ...authParams,
                         p_id_usuario_terapeuta: idTerapeuta,
                         p_id_usuario_paciente: (overridePacienteId != null ? overridePacienteId : authParams.p_actor_user_id),
-                        p_id_usuario_paciente: (overridePacienteId != null ? overridePacienteId : authParams.p_actor_user_id),
                         p_id_producto: idProducto,
+                        p_id_enfoque: idEnfoque,
                         p_fecha: fecha,
                         // clave: NO enviar Z/UTC. Enviar timestamptz con offset local.
                         p_inicio: formatLocalTimestamptz(inicioDate),
                         p_fin: formatLocalTimestamptz(finDate),
-                        p_notas: notas,
+                        // tu API usa p_notas_internas (mantengo compatibilidad si el back lo mappea)
+                        p_notas_internas: notas,
                     },
                 };
 
