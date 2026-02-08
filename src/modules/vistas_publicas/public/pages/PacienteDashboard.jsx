@@ -65,13 +65,34 @@ export default function PacienteDashboard() {
     const WHATSAPP_NUMBER_RAW = safeStr(import.meta.env.VITE_WHATSAPP_NUMBER || "");
     const whatsappNumber = WHATSAPP_NUMBER_RAW.replace(/[^\d]/g, ""); // solo dígitos
 
+    // FIX iPhone/Safari/In-app browsers: evitar window.open + _blank
     const openWhatsApp = (message) => {
         if (!whatsappNumber) {
             showResult("error", "No está configurado VITE_WHATSAPP_NUMBER.", "WhatsApp");
             return;
         }
-        const url = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message || "")}`;
-        window.open(url, "_blank", "noopener,noreferrer");
+
+        const msg = encodeURIComponent(message || "");
+        const phone = whatsappNumber;
+
+        const ua = navigator.userAgent || "";
+        const isIOS = /iPad|iPhone|iPod/.test(ua);
+        const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+        const isInApp = /(FBAN|FBAV|Instagram|Line|Twitter|LinkedInApp|TikTok|Snapchat)/i.test(ua);
+
+        // Más compatible en mobile:
+        const primaryUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${msg}`;
+        // Fallback:
+        const fallbackUrl = `https://wa.me/${phone}?text=${msg}`;
+
+        if (isIOS || isSafari || isInApp) {
+            window.location.href = primaryUrl;
+            return;
+        }
+
+        // Desktop: intenta abrir nueva pestaña; si el popup está bloqueado, navega
+        const win = window.open(primaryUrl, "_blank");
+        if (!win) window.location.href = fallbackUrl;
     };
 
     const handleContactar = () => {
