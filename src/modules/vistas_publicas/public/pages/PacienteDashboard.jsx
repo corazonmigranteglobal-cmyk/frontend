@@ -20,16 +20,16 @@ import ActionResultModal from "../../../../app/components/modals/ActionResultMod
  * - Logo dinámico en header (span heart -> UI_ELEMENTO_OBTENER)
  * - Reprogramar cita (modal + WhatsApp)
  * - NUEVO: Botón "Contactar con nosotros" (WhatsApp)
+ *
+ * FIX:
+ * - Si VITE_WHATSAPP_NUMBER no llega al build, usamos fallback hardcodeado.
+ * - iPhone: usa deep-link whatsapp:// y cae a web si falla.
  */
 export default function PacienteDashboard() {
     const navigate = useNavigate();
     const { session, logout } = useSession();
 
-    const {
-        loading: loadingBootstrap,
-        error: errorBootstrap,
-        getBookingBootstrap,
-    } = useBooking();
+    const { loading: loadingBootstrap, error: errorBootstrap, getBookingBootstrap } = useBooking();
 
     // Tabla de solicitudes/citas
     const [pageSize, setPageSize] = useState(10);
@@ -41,7 +41,7 @@ export default function PacienteDashboard() {
     // Cancelación
     const [cancelingId, setCancelingId] = useState(null);
 
-    // Modals (reemplazo de confirm/alert)
+    // Modals
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [confirmRow, setConfirmRow] = useState(null);
 
@@ -60,26 +60,21 @@ export default function PacienteDashboard() {
     const safeStr = (v) => (v === undefined || v === null ? "" : String(v));
 
     // =========================
-    // WhatsApp (general) - FIX iPhone
+    // WhatsApp (general) - FIX iPhone + FALLBACK si env no llega
     // =========================
     const whatsappNumber = useMemo(() => {
-        // Lee del .env (Vite)
         const raw = safeStr(import.meta.env.VITE_WHATSAPP_NUMBER || "");
-        // Limpia a solo dígitos (tu env: 59178457347)
-        return raw.replace(/[^\d]/g, "");
+        const cleaned = raw.replace(/[^\d]/g, "");
+        // Fallback DEFINITIVO (tu número)
+        return cleaned || "59178457347";
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const openWhatsApp = (message) => {
         const phone = whatsappNumber;
 
-        // IMPORTANTE: NO deshabilitamos el botón; si falta config, mostramos modal.
         if (!phone) {
-            showResult(
-                "error",
-                "No está configurado VITE_WHATSAPP_NUMBER (o no llegó al build).",
-                "WhatsApp"
-            );
+            showResult("error", "No se pudo resolver el número de WhatsApp.", "WhatsApp");
             return;
         }
 
@@ -88,40 +83,35 @@ export default function PacienteDashboard() {
         const isIOS = /iPad|iPhone|iPod/.test(ua);
 
         // URLs
-        const deepLink = `whatsapp://send?phone=${phone}&text=${text}`; // iOS/Android app
-        const webPrimary = `https://api.whatsapp.com/send?phone=${phone}&text=${text}`; // mobile web
-        const webFallback = `https://wa.me/${phone}?text=${text}`; // fallback
+        const deepLink = `whatsapp://send?phone=${phone}&text=${text}`; // App
+        const webPrimary = `https://api.whatsapp.com/send?phone=${phone}&text=${text}`; // Mobile web
+        const webFallback = `https://wa.me/${phone}?text=${text}`; // Fallback
 
-        // iOS: intenta abrir la app. Si no está, cae al web.
+        // iOS: intenta abrir app; si no, cae a web (misma pestaña)
         if (isIOS) {
-            let done = false;
+            let opened = false;
 
-            const onHidden = () => {
-                if (document.visibilityState === "hidden") done = true; // la app se abrió
+            const onVis = () => {
+                if (document.visibilityState === "hidden") opened = true;
             };
 
-            document.addEventListener("visibilitychange", onHidden, { once: true });
+            document.addEventListener("visibilitychange", onVis, { once: true });
 
-            // Intento 1: deep link a la app
             window.location.href = deepLink;
 
-            // Si no se abrió, caemos a web
             setTimeout(() => {
-                if (done) return;
-                // Intento 2: web (misma pestaña)
+                if (opened) return;
                 window.location.href = webPrimary;
-                // Intento 3: fallback
+
                 setTimeout(() => {
-                    // si por alguna razón api.whatsapp no abre, prueba wa.me
-                    // (no podemos detectar bien en todos los browsers, pero ayuda)
-                    if (!done) window.location.href = webFallback;
+                    if (!opened) window.location.href = webFallback;
                 }, 700);
             }, 900);
 
             return;
         }
 
-        // No iOS (desktop/android browsers): intenta popup; si bloqueado, navega
+        // Desktop/Android browsers: intenta popup; si bloqueado, navega
         const win = window.open(webPrimary, "_blank");
         if (!win) window.location.href = webFallback;
     };
@@ -153,12 +143,7 @@ export default function PacienteDashboard() {
                 p_id_elemento: QR_ELEMENT_ID,
             };
 
-            const res = await createApiConn(
-                UI_ENDPOINTS.UI_ELEMENTO_OBTENER,
-                payload,
-                "POST",
-                session
-            );
+            const res = await createApiConn(UI_ENDPOINTS.UI_ELEMENTO_OBTENER, payload, "POST", session);
 
             const row = res?.rows?.[0] || {};
             const url = safeStr(row?.link || row?.metadata?.url || "");
@@ -194,15 +179,10 @@ export default function PacienteDashboard() {
                     p_actor_user_id: session.user_id,
                     p_id_sesion: session.id_sesion,
                     p_id_elemento: LOGO_ELEMENT_ID,
-                    // p_id_pagina: LANDING_PAGE_ID, // referencia (no usada en fn_get_elemento_ui)
+                    // p_id_pagina: LANDING_PAGE_ID,
                 };
 
-                const res = await createApiConn(
-                    UI_ENDPOINTS.UI_ELEMENTO_OBTENER,
-                    payload,
-                    "POST",
-                    session
-                );
+                const res = await createApiConn(UI_ENDPOINTS.UI_ELEMENTO_OBTENER, payload, "POST", session);
 
                 const row = res?.rows?.[0] || {};
                 const url = safeStr(row?.link || row?.metadata?.url || "");
@@ -221,9 +201,9 @@ export default function PacienteDashboard() {
     // =========================
     const [reprogOpen, setReprogOpen] = useState(false);
     const [reprogRow, setReprogRow] = useState(null);
-    const [reprogDate, setReprogDate] = useState(""); // yyyy-mm-dd
-    const [reprogStart, setReprogStart] = useState(""); // HH:MM
-    const [reprogEnd, setReprogEnd] = useState(""); // HH:MM
+    const [reprogDate, setReprogDate] = useState("");
+    const [reprogStart, setReprogStart] = useState("");
+    const [reprogEnd, setReprogEnd] = useState("");
 
     const parseISODate = (iso) => {
         const s = (iso ?? "").toString();
@@ -324,37 +304,32 @@ export default function PacienteDashboard() {
     };
 
     const normalizeEstado = (v) =>
-        (v ?? "").toString().trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") ||
-        "PENDIENTE";
+        (v ?? "")
+            .toString()
+            .trim()
+            .toUpperCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") || "PENDIENTE";
 
     const isPagadoRow = (r) => Boolean(r?.pagado || r?.is_pagado || r?.raw?.pagado || r?.raw?.is_pagado);
 
     const estadoBadge = (estado) => {
         const e = normalizeEstado(estado);
-        if (e === "CONFIRMADA")
-            return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300";
-        if (e === "PAGADO")
-            return "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300";
-        if (e === "REALIZADA")
-            return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300";
-        if (e === "CANCELADA")
-            return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300";
-        if (e === "REPROGRAMADA")
-            return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
+        if (e === "CONFIRMADA") return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300";
+        if (e === "PAGADO") return "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300";
+        if (e === "REALIZADA") return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300";
+        if (e === "CANCELADA") return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300";
+        if (e === "REPROGRAMADA") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
         return "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200";
     };
 
-    // ---- Reglas EXACTAS de acciones
+    // Reglas EXACTAS de acciones
     const getAcciones = (row) => {
         const e = normalizeEstado(row?.estado);
         const pagado = isPagadoRow(row);
 
-        if (e === "CANCELADA" || e === "REALIZADA") {
-            return { show: false, canCancelar: false, canReprogramar: false };
-        }
-        if (e === "PENDIENTE") {
-            return { show: true, canCancelar: true, canReprogramar: true };
-        }
+        if (e === "CANCELADA" || e === "REALIZADA") return { show: false, canCancelar: false, canReprogramar: false };
+        if (e === "PENDIENTE") return { show: true, canCancelar: true, canReprogramar: true };
         if (e === "CONFIRMADA") {
             if (pagado) return { show: true, canCancelar: false, canReprogramar: true };
             return { show: true, canCancelar: true, canReprogramar: true };
@@ -392,12 +367,7 @@ export default function PacienteDashboard() {
                 p_motivo: "Cancelada por el paciente",
             };
 
-            const res = await createApiConn(
-                TERAPIA_ENDPOINTS.CITAS_ESTADO_ACTUALIZAR,
-                payload,
-                "POST",
-                session
-            );
+            const res = await createApiConn(TERAPIA_ENDPOINTS.CITAS_ESTADO_ACTUALIZAR, payload, "POST", session);
 
             await fetchSolicitudes({
                 p_limit: pageSize,
@@ -466,16 +436,10 @@ export default function PacienteDashboard() {
             {/* Modal Reprogramar */}
             {reprogOpen ? (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center px-4">
-                    <div
-                        className="absolute inset-0 bg-black/50"
-                        onClick={closeReprogramar}
-                        aria-hidden="true"
-                    />
+                    <div className="absolute inset-0 bg-black/50" onClick={closeReprogramar} aria-hidden="true" />
                     <div className="relative w-full max-w-2xl rounded-3xl bg-white dark:bg-gray-950 border border-black/5 dark:border-white/10 shadow-2xl overflow-hidden">
                         <div className="flex items-center justify-between px-6 py-4 border-b border-black/5 dark:border-white/10">
-                            <h3 className="text-xl font-bold text-slate-800 dark:text-white">
-                                Reprogramar cita
-                            </h3>
+                            <h3 className="text-xl font-bold text-slate-800 dark:text-white">Reprogramar cita</h3>
                             <button
                                 type="button"
                                 onClick={closeReprogramar}
@@ -489,17 +453,13 @@ export default function PacienteDashboard() {
                         <div className="px-6 py-5">
                             <div className="text-slate-600 dark:text-slate-300 mb-4">
                                 Cita:{" "}
-                                <strong>
-                                    {safeStr(reprogRow?.paciente_nombre_completo || reprogRow?.paciente_nombre || "Paciente")}
-                                </strong>{" "}
+                                <strong>{safeStr(reprogRow?.paciente_nombre_completo || reprogRow?.paciente_nombre || "Paciente")}</strong>{" "}
                                 (ID {safeStr(reprogRow?.id_cita)})
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="md:col-span-3">
-                                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                                        FECHA
-                                    </div>
+                                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">FECHA</div>
                                     <input
                                         type="date"
                                         value={reprogDate}
@@ -509,9 +469,7 @@ export default function PacienteDashboard() {
                                 </div>
 
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                                        INICIO
-                                    </div>
+                                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">INICIO</div>
                                     <input
                                         type="time"
                                         value={reprogStart}
@@ -521,9 +479,7 @@ export default function PacienteDashboard() {
                                 </div>
 
                                 <div>
-                                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                                        FIN
-                                    </div>
+                                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">FIN</div>
                                     <input
                                         type="time"
                                         value={reprogEnd}
@@ -580,21 +536,12 @@ export default function PacienteDashboard() {
                         <div className="flex items-center justify-between h-16">
                             <div className="flex items-center gap-3">
                                 {logoUrl ? (
-                                    <img
-                                        src={logoUrl}
-                                        alt="Corazón de Migrante"
-                                        className="w-8 h-8 object-contain"
-                                        draggable={false}
-                                    />
+                                    <img src={logoUrl} alt="Corazón de Migrante" className="w-8 h-8 object-contain" draggable={false} />
                                 ) : (
-                                    <span className="material-symbols-outlined text-primary text-2xl">
-                                        favorite
-                                    </span>
+                                    <span className="material-symbols-outlined text-primary text-2xl">favorite</span>
                                 )}
 
-                                <span className="font-bold text-lg text-slate-800 dark:text-white">
-                                    Corazón de Migrante
-                                </span>
+                                <span className="font-bold text-lg text-slate-800 dark:text-white">Corazón de Migrante</span>
                             </div>
 
                             <div className="flex items-center gap-4">
@@ -654,7 +601,6 @@ export default function PacienteDashboard() {
                                     {qrOpen ? "Ocultar QR" : "Mostrar QR"}
                                 </button>
 
-                                {/* NO se deshabilita por whatsappNumber (para evitar “inhabilitado” en iPhone por issues de env/caché) */}
                                 <button
                                     type="button"
                                     onClick={handleContactar}
@@ -674,9 +620,7 @@ export default function PacienteDashboard() {
                             <div className="px-6 py-4 border-b border-black/5 dark:border-white/10 flex items-center justify-between gap-4">
                                 <div>
                                     <h3 className="font-bold text-slate-800 dark:text-white">QR</h3>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        Escanea este código desde tu celular.
-                                    </p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Escanea este código desde tu celular.</p>
                                 </div>
 
                                 <button
@@ -701,32 +645,19 @@ export default function PacienteDashboard() {
                                 ) : qrUrl ? (
                                     <div className="flex flex-col items-center">
                                         <div className="w-[260px] max-w-full rounded-2xl bg-white p-4 shadow-sm border border-black/5 dark:bg-white dark:border-black/10">
-                                            <img
-                                                src={qrUrl}
-                                                alt="QR"
-                                                className="w-full h-auto object-contain"
-                                                loading="eager"
-                                                draggable={false}
-                                            />
+                                            <img src={qrUrl} alt="QR" className="w-full h-auto object-contain" loading="eager" draggable={false} />
                                         </div>
 
                                         <p className="mt-3 text-xs text-slate-500 dark:text-slate-400 text-center max-w-md">
                                             Si no puedes escanearlo, abre el enlace desde tu teléfono.
                                         </p>
 
-                                        {/* En iOS suele ir mejor sin target _blank */}
-                                        <a
-                                            href={qrUrl}
-                                            rel="noreferrer"
-                                            className="mt-2 text-xs text-primary hover:underline"
-                                        >
+                                        <a href={qrUrl} rel="noreferrer" className="mt-2 text-xs text-primary hover:underline">
                                             Abrir QR
                                         </a>
                                     </div>
                                 ) : (
-                                    <div className="text-center text-sm text-slate-500 dark:text-slate-400">
-                                        No hay QR disponible.
-                                    </div>
+                                    <div className="text-center text-sm text-slate-500 dark:text-slate-400">No hay QR disponible.</div>
                                 )}
                             </div>
                         </div>
@@ -735,9 +666,7 @@ export default function PacienteDashboard() {
                     {/* Próximas Citas */}
                     <div className="rounded-2xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-sm overflow-hidden">
                         <div className="px-6 py-4 border-b border-black/5 dark:border-white/10 flex items-center justify-between gap-4">
-                            <h2 className="font-bold text-lg text-slate-800 dark:text-white">
-                                Próximas Citas
-                            </h2>
+                            <h2 className="font-bold text-lg text-slate-800 dark:text-white">Próximas Citas</h2>
 
                             <div className="flex items-center gap-2">
                                 <select
@@ -779,9 +708,7 @@ export default function PacienteDashboard() {
                                     disabled={!canPrev || loadingSolicitudes}
                                     title="Anterior"
                                 >
-                                    <span className="material-symbols-outlined text-[18px]">
-                                        chevron_left
-                                    </span>
+                                    <span className="material-symbols-outlined text-[18px]">chevron_left</span>
                                     Ant.
                                 </button>
 
@@ -792,9 +719,7 @@ export default function PacienteDashboard() {
                                     title="Siguiente"
                                 >
                                     Sig.
-                                    <span className="material-symbols-outlined text-[18px]">
-                                        chevron_right
-                                    </span>
+                                    <span className="material-symbols-outlined text-[18px]">chevron_right</span>
                                 </button>
                             </div>
                         </div>
@@ -825,10 +750,7 @@ export default function PacienteDashboard() {
                                                 const pagado = isPagadoRow(r);
 
                                                 return (
-                                                    <tr
-                                                        key={r.id_cita}
-                                                        className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors"
-                                                    >
+                                                    <tr key={r.id_cita} className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors">
                                                         <td className="py-3 pr-4 whitespace-nowrap text-slate-800 dark:text-white">
                                                             {fmtFecha(r.fecha_programada)}
                                                         </td>
@@ -839,11 +761,7 @@ export default function PacienteDashboard() {
 
                                                         <td className="py-3 pr-4 whitespace-nowrap">
                                                             <div className="flex items-center gap-2">
-                                                                <span
-                                                                    className={`px-3 py-1 rounded-full text-xs font-semibold ${estadoBadge(
-                                                                        r.estado
-                                                                    )}`}
-                                                                >
+                                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${estadoBadge(r.estado)}`}>
                                                                     {normalizeEstado(r.estado)}
                                                                 </span>
 
@@ -879,9 +797,7 @@ export default function PacienteDashboard() {
                                       dark:border-white/10 dark:bg-black/20 dark:text-slate-200 dark:hover:bg-white/10"
                                                                             title="Reprogramar cita"
                                                                         >
-                                                                            <span className="material-symbols-outlined text-[16px]">
-                                                                                calendar_month
-                                                                            </span>
+                                                                            <span className="material-symbols-outlined text-[16px]">calendar_month</span>
                                                                             Reprogramar
                                                                         </button>
                                                                     ) : null}
@@ -897,9 +813,7 @@ export default function PacienteDashboard() {
                                       disabled:opacity-60 disabled:cursor-not-allowed"
                                                                             title="Cancelar solicitud"
                                                                         >
-                                                                            <span className="material-symbols-outlined text-[16px]">
-                                                                                cancel
-                                                                            </span>
+                                                                            <span className="material-symbols-outlined text-[16px]">cancel</span>
                                                                             {cancelingId === r.id_cita ? "Cancelando..." : "Cancelar"}
                                                                         </button>
                                                                     ) : null}
@@ -917,16 +831,10 @@ export default function PacienteDashboard() {
                             ) : (
                                 <div className="text-center py-12">
                                     <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
-                                        <span className="material-symbols-outlined text-slate-400 text-3xl">
-                                            event_busy
-                                        </span>
+                                        <span className="material-symbols-outlined text-slate-400 text-3xl">event_busy</span>
                                     </div>
-                                    <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                                        No hay citas para mostrar
-                                    </h3>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                                        Agenda una cita para comenzar.
-                                    </p>
+                                    <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">No hay citas para mostrar</h3>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Agenda una cita para comenzar.</p>
                                     <Link
                                         to="/paciente/booking"
                                         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white font-medium text-sm hover:bg-primary/90 transition-colors"
