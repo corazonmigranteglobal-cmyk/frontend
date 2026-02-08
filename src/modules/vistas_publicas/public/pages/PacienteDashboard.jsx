@@ -60,39 +60,70 @@ export default function PacienteDashboard() {
     const safeStr = (v) => (v === undefined || v === null ? "" : String(v));
 
     // =========================
-    // WhatsApp (general)
+    // WhatsApp (general) - FIX iPhone
     // =========================
-    const WHATSAPP_NUMBER_RAW = safeStr(import.meta.env.VITE_WHATSAPP_NUMBER || "");
-    const whatsappNumber = WHATSAPP_NUMBER_RAW.replace(/[^\d]/g, ""); // solo dígitos
+    const whatsappNumber = useMemo(() => {
+        // Lee del .env (Vite)
+        const raw = safeStr(import.meta.env.VITE_WHATSAPP_NUMBER || "");
+        // Limpia a solo dígitos (tu env: 59178457347)
+        return raw.replace(/[^\d]/g, "");
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-    // FIX iPhone/Safari/In-app browsers: evitar window.open + _blank
     const openWhatsApp = (message) => {
-        if (!whatsappNumber) {
-            showResult("error", "No está configurado VITE_WHATSAPP_NUMBER.", "WhatsApp");
-            return;
-        }
-
-        const msg = encodeURIComponent(message || "");
         const phone = whatsappNumber;
 
-        const ua = navigator.userAgent || "";
-        const isIOS = /iPad|iPhone|iPod/.test(ua);
-        const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
-        const isInApp = /(FBAN|FBAV|Instagram|Line|Twitter|LinkedInApp|TikTok|Snapchat)/i.test(ua);
-
-        // Más compatible en mobile:
-        const primaryUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${msg}`;
-        // Fallback:
-        const fallbackUrl = `https://wa.me/${phone}?text=${msg}`;
-
-        if (isIOS || isSafari || isInApp) {
-            window.location.href = primaryUrl;
+        // IMPORTANTE: NO deshabilitamos el botón; si falta config, mostramos modal.
+        if (!phone) {
+            showResult(
+                "error",
+                "No está configurado VITE_WHATSAPP_NUMBER (o no llegó al build).",
+                "WhatsApp"
+            );
             return;
         }
 
-        // Desktop: intenta abrir nueva pestaña; si el popup está bloqueado, navega
-        const win = window.open(primaryUrl, "_blank");
-        if (!win) window.location.href = fallbackUrl;
+        const text = encodeURIComponent(message || "");
+        const ua = navigator.userAgent || "";
+        const isIOS = /iPad|iPhone|iPod/.test(ua);
+
+        // URLs
+        const deepLink = `whatsapp://send?phone=${phone}&text=${text}`; // iOS/Android app
+        const webPrimary = `https://api.whatsapp.com/send?phone=${phone}&text=${text}`; // mobile web
+        const webFallback = `https://wa.me/${phone}?text=${text}`; // fallback
+
+        // iOS: intenta abrir la app. Si no está, cae al web.
+        if (isIOS) {
+            let done = false;
+
+            const onHidden = () => {
+                if (document.visibilityState === "hidden") done = true; // la app se abrió
+            };
+
+            document.addEventListener("visibilitychange", onHidden, { once: true });
+
+            // Intento 1: deep link a la app
+            window.location.href = deepLink;
+
+            // Si no se abrió, caemos a web
+            setTimeout(() => {
+                if (done) return;
+                // Intento 2: web (misma pestaña)
+                window.location.href = webPrimary;
+                // Intento 3: fallback
+                setTimeout(() => {
+                    // si por alguna razón api.whatsapp no abre, prueba wa.me
+                    // (no podemos detectar bien en todos los browsers, pero ayuda)
+                    if (!done) window.location.href = webFallback;
+                }, 700);
+            }, 900);
+
+            return;
+        }
+
+        // No iOS (desktop/android browsers): intenta popup; si bloqueado, navega
+        const win = window.open(webPrimary, "_blank");
+        if (!win) window.location.href = webFallback;
     };
 
     const handleContactar = () => {
@@ -163,8 +194,7 @@ export default function PacienteDashboard() {
                     p_actor_user_id: session.user_id,
                     p_id_sesion: session.id_sesion,
                     p_id_elemento: LOGO_ELEMENT_ID,
-                    // LANDING_PAGE_ID no se usa en fn_get_elemento_ui (queda como referencia)
-                    // p_id_pagina: LANDING_PAGE_ID,
+                    // p_id_pagina: LANDING_PAGE_ID, // referencia (no usada en fn_get_elemento_ui)
                 };
 
                 const res = await createApiConn(
@@ -314,34 +344,25 @@ export default function PacienteDashboard() {
         return "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200";
     };
 
-    // ---- Reglas EXACTAS de acciones (según tu pedido)
+    // ---- Reglas EXACTAS de acciones
     const getAcciones = (row) => {
         const e = normalizeEstado(row?.estado);
         const pagado = isPagadoRow(row);
 
-        // Si es cancelada o realizada -> nada
         if (e === "CANCELADA" || e === "REALIZADA") {
             return { show: false, canCancelar: false, canReprogramar: false };
         }
-
-        // Pendiente -> cancelar + reprogramar
         if (e === "PENDIENTE") {
             return { show: true, canCancelar: true, canReprogramar: true };
         }
-
-        // Confirmada -> si pagada: solo reprogramar; si no pagada: cancelar + reprogramar
         if (e === "CONFIRMADA") {
             if (pagado) return { show: true, canCancelar: false, canReprogramar: true };
             return { show: true, canCancelar: true, canReprogramar: true };
         }
-
-        // (Opcional) Si llega REPROGRAMADA desde backend, lo tratamos como "confirmada no final"
         if (e === "REPROGRAMADA") {
             if (pagado) return { show: true, canCancelar: false, canReprogramar: true };
             return { show: true, canCancelar: true, canReprogramar: true };
         }
-
-        // Default seguro: no mostrar acciones
         return { show: false, canCancelar: false, canReprogramar: false };
     };
 
@@ -405,9 +426,7 @@ export default function PacienteDashboard() {
 
         const f = normalizeEstado(estadoFilter);
         if (f !== "TODOS") {
-            if (f === "PAGADO") {
-                return list.filter((r) => isPagadoRow(r));
-            }
+            if (f === "PAGADO") return list.filter((r) => isPagadoRow(r));
             return list.filter((r) => normalizeEstado(r?.estado) === f);
         }
         return list;
@@ -582,7 +601,9 @@ export default function PacienteDashboard() {
                                 <span className="text-sm text-slate-600 dark:text-slate-300">
                                     Hola,{" "}
                                     <strong>
-                                        {session?.user_id ? `${session.nombre}` + " " + `${session.apellido} (ID: ${session.user_id})` : "Paciente"}
+                                        {session?.user_id
+                                            ? `${session.nombre} ${session.apellido} (ID: ${session.user_id})`
+                                            : "Paciente"}
                                     </strong>
                                 </span>
 
@@ -633,13 +654,12 @@ export default function PacienteDashboard() {
                                     {qrOpen ? "Ocultar QR" : "Mostrar QR"}
                                 </button>
 
+                                {/* NO se deshabilita por whatsappNumber (para evitar “inhabilitado” en iPhone por issues de env/caché) */}
                                 <button
                                     type="button"
                                     onClick={handleContactar}
-                                    disabled={!whatsappNumber}
-                                    className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold shadow-md hover:bg-green-700 transition-all hover:scale-[1.01] active:scale-[0.99]
-                  disabled:opacity-60 disabled:cursor-not-allowed"
-                                    title={!whatsappNumber ? "No está configurado VITE_WHATSAPP_NUMBER" : "Contactar por WhatsApp"}
+                                    className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold shadow-md hover:bg-green-700 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                                    title="Contactar por WhatsApp"
                                 >
                                     <span className="material-symbols-outlined">support_agent</span>
                                     Contactar con nosotros
@@ -694,9 +714,9 @@ export default function PacienteDashboard() {
                                             Si no puedes escanearlo, abre el enlace desde tu teléfono.
                                         </p>
 
+                                        {/* En iOS suele ir mejor sin target _blank */}
                                         <a
                                             href={qrUrl}
-                                            target="_blank"
                                             rel="noreferrer"
                                             className="mt-2 text-xs text-primary hover:underline"
                                         >
