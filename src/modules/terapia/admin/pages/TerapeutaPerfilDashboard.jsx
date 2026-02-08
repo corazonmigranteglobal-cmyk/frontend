@@ -190,6 +190,7 @@ export default function TerapeutaPerfilDashboard({
         open={openHorarioModal}
         onClose={() => setOpenHorarioModal(false)}
         isSaving={Boolean(creatingHorario)}
+        defaultTimeZone={profile?.timezone || null}
         onSubmit={async (form) => {
           try {
             await createHorarioFromModal(form);

@@ -10,11 +10,13 @@ export default function SolicitudDetail({
     onOpenReject,
     onOpenReprog,
     onOpenConfirm,
+    onOpenPagado,
     onOpenRealizar,
     className = "col-span-12 lg:col-span-8",
     variant = "list", // "list" | "agenda"
 }) {
     const estadoNorm = normalizeEstado(selected?.estado);
+    const isPagado = Boolean(selected?.pagado || selected?.raw?.is_pagado || selected?.raw?.pagado);
 
     const isCancelado = estadoNorm === "CANCELADO";
     const isConfirmado = estadoNorm === "CONFIRMADO";
@@ -24,7 +26,13 @@ export default function SolicitudDetail({
     const disableAll = isCancelado;
 
     // Solo tiene sentido "Realizar" si está confirmado y aún no está realizado/cancelado
-    const disableRealizar = !isConfirmado || isCancelado || isRealizado;
+    const canRealizar = isConfirmado || isPagado;
+    const disableRealizar = !canRealizar || isCancelado || isRealizado;
+
+    // "Pagado" es independiente: se puede marcar si está CONFIRMADO o REALIZADO.
+    // No se permite si está cancelado o ya está pagado.
+    const canPagado = isConfirmado || isRealizado;
+    const disablePagado = !canPagado || isPagado || isCancelado;
 
     const disableReject = disableAll;
     const disableReprogram = disableAll;
@@ -56,11 +64,16 @@ export default function SolicitudDetail({
                             </h2>
 
                             <span
-                                className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest ${selected?.estadoBadgeClass || "bg-slate-100 text-slate-500"
-                                    }`}
+                                className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest ${selected?.estadoBadgeClass || "bg-slate-100 text-slate-500"}`}
                             >
                                 {selected?.estado || ""}
                             </span>
+
+                            {isPagado ? (
+                                <span className="text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest bg-violet-700 text-white">
+                                    Pagado
+                                </span>
+                            ) : null}
                         </div>
 
                         {/* AGENDA vs LISTA (tu cambio principal) */}
@@ -287,6 +300,23 @@ export default function SolicitudDetail({
                     >
                         <span className="material-symbols-outlined text-[20px]">verified</span>
                         Confirmar Cita
+                    </button>
+
+                    <button
+                        type="button"
+                        disabled={disablePagado}
+                        onClick={() => {
+                            if (disablePagado) return;
+                            onOpenPagado?.();
+                        }}
+                        className={`px-10 py-4 rounded-xl font-bold text-xs uppercase tracking-[0.2em] flex items-center gap-2 transition-all shadow-xl
+              ${disablePagado
+                                ? "opacity-50 cursor-not-allowed bg-slate-300 text-white shadow-none"
+                                : "bg-violet-700 text-white hover:bg-violet-900 shadow-violet-700/20"
+                            }`}
+                    >
+                        <span className="material-symbols-outlined text-[20px]">paid</span>
+                        Pagado
                     </button>
 
                     <button

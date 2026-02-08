@@ -8,6 +8,7 @@ import SolicitudDetail from "../components/SolicitudDetail";
 
 import RejectModal from "../components/modals/RejectModal";
 import ConfirmModal from "../components/modals/ConfirmModal";
+import PagadoModal from "../components/modals/PagadoModal";
 import ReprogramarModal from "../components/modals/ReprogramarModal";
 import SuccessModal from "../components/modals/SuccessModal";
 import RealizarModal from "../components/modals/RealizarModal";
@@ -132,6 +133,10 @@ export default function RequestDashboard({ session, onLogout, activeTab, onNavig
                             actions.setSuccessOpen(false);
                             actions.setConfirmOpen(true);
                         }}
+                        onOpenPagado={() => {
+                            actions.setSuccessOpen(false);
+                            actions.setPagadoOpen(true);
+                        }}
                         onOpenRealizar={() => {
                             actions.setSuccessOpen(false);
                             actions.setRealizarOpen(true);
@@ -164,6 +169,15 @@ export default function RequestDashboard({ session, onLogout, activeTab, onNavig
                 error={actions.confirmError}
                 loading={actions.confirmLoading}
                 onSubmit={actions.handleConfirmSubmit}
+            />
+
+            <PagadoModal
+                open={actions.pagadoOpen}
+                onClose={() => actions.setPagadoOpen(false)}
+                selected={selected}
+                error={actions.pagadoError}
+                loading={actions.pagadoLoading}
+                onSubmit={actions.handlePagadoSubmit}
             />
 
             <RealizarModal

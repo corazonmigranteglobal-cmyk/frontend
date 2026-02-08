@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useCentrosCostoAdmin } from "../hooks/useCentrosCostoAdmin";
 import ConfirmDeleteModal from "../components/modals/ConfirmDeleteModal";
+import ActionResultModal from "../components/modals/ActionResultModal";
 import MetadataKeyValueTable from "../components/MetadataKeyValueTable";
 import PaginationControls from "../components/PaginationControls";
 
@@ -39,6 +40,19 @@ export default function CentroCostoPage({ session }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Modal resultado (reemplazo de alert)
+  const [resultOpen, setResultOpen] = useState(false);
+  const [resultKind, setResultKind] = useState("info");
+  const [resultTitle, setResultTitle] = useState("");
+  const [resultMessage, setResultMessage] = useState("");
+
+  const showResult = (kind, message, title = "") => {
+    setResultKind(kind || "info");
+    setResultTitle(title || "");
+    setResultMessage(message || "");
+    setResultOpen(true);
+  };
+
   const filteredRows = useMemo(() => {
     let data = [...rows];
 
@@ -75,11 +89,11 @@ export default function CentroCostoPage({ session }) {
 
   const onSave = async () => {
     if (!session?.id_sesion) {
-      alert("Sesión inválida: falta id_sesion");
+      showResult("error", "Sesión inválida: falta id_sesion", "Ocurrió un problema");
       return;
     }
     if (!form.codigo || !form.nombre) {
-      alert("Código y Nombre son obligatorios");
+      showResult("error", "Código y Nombre son obligatorios", "Ocurrió un problema");
       return;
     }
 
@@ -105,7 +119,7 @@ export default function CentroCostoPage({ session }) {
       startCreate();
     } catch (e) {
       console.error(e);
-      alert(e?.message || "Error al guardar");
+      showResult("error", e?.message || "Error al guardar", "Ocurrió un problema");
     } finally {
       setSaving(false);
     }
@@ -127,7 +141,7 @@ export default function CentroCostoPage({ session }) {
       setDeleteTarget(null);
     } catch (e) {
       console.error(e);
-      alert(e?.message || "Error al eliminar");
+      showResult("error", e?.message || "Error al eliminar", "Ocurrió un problema");
     } finally {
       setDeleting(false);
     }
@@ -140,6 +154,15 @@ export default function CentroCostoPage({ session }) {
   );
 
   return (
+    <>
+      <ActionResultModal
+        open={resultOpen}
+        kind={resultKind}
+        title={resultTitle}
+        message={resultMessage}
+        onClose={() => setResultOpen(false)}
+      />
+
     <main className="p-0 max-w-[1920px] mx-auto w-full">
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -478,5 +501,6 @@ export default function CentroCostoPage({ session }) {
         }}
       />
     </main>
+    </>
   );
 }

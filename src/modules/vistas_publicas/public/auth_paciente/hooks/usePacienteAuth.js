@@ -126,6 +126,8 @@ export function usePacienteAuth({ initialMode } = {}) {
             user_id: data.user_id,
             id_sesion: data.id_sesion,
             role: data.role,
+            nombre: data.nombre,
+            apellido: data.apellido,
             is_admin: data.is_admin || false,
             is_super_admin: data.is_super_admin || false,
             can_manage_files: data.can_manage_files || false,

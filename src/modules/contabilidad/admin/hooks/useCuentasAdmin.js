@@ -1,18 +1,24 @@
+// src/modules/contabilidad/admin/hooks/useCuentasAdmin.js
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createApiConn } from "../../../../helpers/api_conn_factory";
 import { CONTABILIDAD_ENDPOINT } from "../../../../config/CONTABILIDAD_ENDPOINT";
 
 function assertDbOk(res) {
-    // A veces el backend devuelve HTTP 200 con ok=true pero status="error" dentro de rows[0]
     if (res?.ok === false) {
-        throw new Error(res?.message || "Operación fallida");
-    }
-    const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
-    if (r0?.status && String(r0.status).toLowerCase() !== "ok") {
-        const err = new Error(r0?.message || "Operación fallida");
+        const msg = res?.message || res?.error || "Operación fallida";
+        const err = new Error(msg);
         err.data = res;
         throw err;
     }
+
+    const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
+    if (r0?.status && String(r0.status).toLowerCase() !== "ok") {
+        const msg = r0?.message || r0?.error || "Operación fallida";
+        const err = new Error(msg);
+        err.data = res;
+        throw err;
+    }
+
     return res;
 }
 
@@ -28,7 +34,6 @@ function mapCuentaRow(r) {
         categoria: r.categoria ?? "",
         moneda: r.moneda ?? "",
         register_status: r.register_status ?? "Activo",
-        // estos campos pueden venir solo en crear/editar
         metadata: r.metadata ?? null,
         created_at: r.created_at ?? null,
         updated_at: r.updated_at ?? null,
@@ -69,7 +74,7 @@ function safeWriteCache(key, cacheObj) {
     try {
         sessionStorage.setItem(key, JSON.stringify(cacheObj));
     } catch {
-        // ignore quota/serialization errors
+        // ignore
     }
 }
 
@@ -94,6 +99,16 @@ function getCachedById(key) {
     return base?.[CACHE_ENTITY]?.byId || {};
 }
 
+// ✅ helper: solo devuelve número válido o undefined (para omitir)
+function normalizeOptionalId(v) {
+    if (v === undefined) return undefined;
+    if (v === null) return undefined;
+    if (v === "") return undefined;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return undefined;
+    return n;
+}
+
 export function useCuentasAdmin(session, { autoFetch = true, limit = 200 } = {}) {
     const [rows, setRows] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -101,7 +116,6 @@ export function useCuentasAdmin(session, { autoFetch = true, limit = 200 } = {})
 
     const cacheKey = useMemo(() => getCacheKey(session), [session?.id_sesion]);
 
-    // crea la clave en sessionStorage apenas exista la sesión (para que se vea en DevTools)
     useEffect(() => {
         if (!cacheKey) return;
         ensureEntityCache(cacheKey);
@@ -115,7 +129,7 @@ export function useCuentasAdmin(session, { autoFetch = true, limit = 200 } = {})
                 return;
             }
             if (!session?.id_sesion) {
-                setError("No hay sesión activa (id_sesion faltante). ");
+                setError("No hay sesión activa (id_sesion faltante).");
                 return;
             }
 
@@ -126,7 +140,6 @@ export function useCuentasAdmin(session, { autoFetch = true, limit = 200 } = {})
                 const payload = {
                     ...getActorPayload(session),
 
-                    // Paginación (compatibilidad)
                     p_limit: limit,
                     p_offset: offset,
                     limit,
@@ -142,21 +155,32 @@ export function useCuentasAdmin(session, { autoFetch = true, limit = 200 } = {})
                 const list = Array.isArray(res?.rows) ? res.rows : [];
                 const mapped = list.map(mapCuentaRow);
 
-                // Overlay con cache de sesión: muestra inmediatamente cambios exitosos
                 const cachedById = cacheKey ? getCachedById(cacheKey) : {};
                 const seen = new Set();
-                const merged = mapped.map((r) => {
-                    const id = String(r.id_cuenta);
-                    seen.add(id);
-                    const c = cachedById?.[id];
+
+                let merged = mapped.map((r) => {
+                    const id = String(r.id_cuenta ?? "");
+                    if (id) seen.add(id);
+                    const c = id ? cachedById?.[id] : null;
                     return c ? { ...r, ...c } : r;
                 });
-                // agrega filas que solo estén en cache (creadas/actualizadas recientemente)
+
                 for (const [id, c] of Object.entries(cachedById || {})) {
                     if (!seen.has(String(id))) merged.unshift(c);
                 }
+
+                // ✅ dedupe final
+                const byId = new Map();
+                for (const r of merged) {
+                    const k = String(r?.id_cuenta ?? "");
+                    if (!k) continue;
+                    byId.set(k, r);
+                }
+                merged = Array.from(byId.values());
+
                 setRows(merged);
             } catch (e) {
+                console.error("fetchCuentas error:", e?.message, e?.data);
                 setError(e?.message || "Error al listar cuentas");
             } finally {
                 setIsLoading(false);
@@ -174,7 +198,6 @@ export function useCuentasAdmin(session, { autoFetch = true, limit = 200 } = {})
             const payload = {
                 ...getActorPayload(session),
                 p_nombre: cuenta.nombre,
-                p_id_grupo_cuenta: cuenta.id_grupo_cuenta,
                 p_codigo: cuenta.codigo,
                 p_tipo_cuenta: cuenta.tipo_cuenta,
                 p_sub_tipo: cuenta.sub_tipo,
@@ -183,22 +206,26 @@ export function useCuentasAdmin(session, { autoFetch = true, limit = 200 } = {})
                 p_metadata: cuenta.metadata ?? {},
             };
 
+            // ✅ SI ES NULL/"" => NO SE MANDA
+            const grupoId = normalizeOptionalId(cuenta.id_grupo_cuenta);
+            if (grupoId !== undefined) payload.p_id_grupo_cuenta = grupoId;
+
             const res = assertDbOk(await createApiConn(endpoint, payload, "POST", session));
             const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
             const cuentaResp = r0?.data?.cuenta;
+
             if (cuentaResp?.id_cuenta) {
                 const mapped = mapCuentaRow(cuentaResp);
                 if (cacheKey) upsertCacheRow(cacheKey, mapped.id_cuenta, mapped);
+
                 setRows((prev) => {
-                    const idx = prev.findIndex((x) => x.id_cuenta === mapped.id_cuenta);
-                    if (idx >= 0) {
-                        const copy = [...prev];
-                        copy[idx] = { ...copy[idx], ...mapped };
-                        return copy;
-                    }
-                    return [mapped, ...prev];
+                    const byId = new Map();
+                    for (const p of prev) byId.set(String(p.id_cuenta), p);
+                    byId.set(String(mapped.id_cuenta), { ...(byId.get(String(mapped.id_cuenta)) || {}), ...mapped });
+                    return Array.from(byId.values());
                 });
             }
+
             return res;
         },
         [session, cacheKey]
@@ -214,26 +241,37 @@ export function useCuentasAdmin(session, { autoFetch = true, limit = 200 } = {})
                 ...getActorPayload(session),
                 p_id_cuenta: cuenta.id_cuenta,
                 p_nombre: cuenta.nombre,
-                p_id_grupo_cuenta: cuenta.id_grupo_cuenta,
                 p_codigo: cuenta.codigo,
                 p_tipo_cuenta: cuenta.tipo_cuenta,
                 p_sub_tipo: cuenta.sub_tipo,
                 p_categoria: cuenta.categoria,
                 p_moneda: cuenta.moneda,
                 p_register_status: cuenta.register_status ?? "Activo",
-                // Importante: el endpoint listar no devuelve metadata, si enviamos {} se sobre-escribe.
-                // Dejamos undefined si no se tocó metadata (JSON.stringify omitirá el campo).
+
+                // metadata: undefined => se omite
                 p_metadata: cuenta.metadata,
             };
+
+            // ✅ SI ES NULL/""/undefined => NO SE MANDA (regla que pediste)
+            const grupoId = normalizeOptionalId(cuenta.id_grupo_cuenta);
+            if (grupoId !== undefined) payload.p_id_grupo_cuenta = grupoId;
 
             const res = assertDbOk(await createApiConn(endpoint, payload, "POST", session));
             const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
             const cuentaResp = r0?.data?.cuenta;
+
             if (cuentaResp?.id_cuenta) {
                 const mapped = mapCuentaRow(cuentaResp);
                 if (cacheKey) upsertCacheRow(cacheKey, mapped.id_cuenta, mapped);
-                setRows((prev) => prev.map((x) => (x.id_cuenta === mapped.id_cuenta ? { ...x, ...mapped } : x)));
+
+                setRows((prev) => {
+                    const byId = new Map();
+                    for (const p of prev) byId.set(String(p.id_cuenta), p);
+                    byId.set(String(mapped.id_cuenta), { ...(byId.get(String(mapped.id_cuenta)) || {}), ...mapped });
+                    return Array.from(byId.values());
+                });
             }
+
             return res;
         },
         [session, cacheKey]
@@ -254,12 +292,19 @@ export function useCuentasAdmin(session, { autoFetch = true, limit = 200 } = {})
             const res = assertDbOk(await createApiConn(endpoint, payload, "POST", session));
             const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
             const cuentaResp = r0?.data?.cuenta;
+
             if (cuentaResp?.id_cuenta) {
                 const mapped = mapCuentaRow(cuentaResp);
-                // en apagar, normalmente register_status cambia a Inactivo
                 if (cacheKey) upsertCacheRow(cacheKey, mapped.id_cuenta, mapped);
-                setRows((prev) => prev.map((x) => (x.id_cuenta === mapped.id_cuenta ? { ...x, ...mapped } : x)));
+
+                setRows((prev) => {
+                    const byId = new Map();
+                    for (const p of prev) byId.set(String(p.id_cuenta), p);
+                    byId.set(String(mapped.id_cuenta), { ...(byId.get(String(mapped.id_cuenta)) || {}), ...mapped });
+                    return Array.from(byId.values());
+                });
             }
+
             return res;
         },
         [session, cacheKey]

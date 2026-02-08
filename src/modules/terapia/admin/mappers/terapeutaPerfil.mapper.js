@@ -18,6 +18,8 @@ export function mapTerapeutaPerfilToUI(apiData = {}, fallback = {}) {
     apellidos: safeStr(usuario?.apellido || fallback.apellidos),
     telefono: safeStr(usuario?.telefono || fallback.telefono),
 
+    timezone: safeStr(usuario?.timezone || usuario?.time_zone || usuario?.tz || terapeuta?.timezone || terapeuta?.time_zone || fallback.timezone),
+
     // Estos campos viven en usuarios.usuario
     fecha_nacimiento: safeStr(usuario?.fecha_nacimiento || usuario?.birth_date || fallback.fecha_nacimiento),
     sexo: safeStr(usuario?.sexo || fallback.sexo),
@@ -53,29 +55,30 @@ export function mapTerapeutaPerfilFromSession(session = {}) {
 
   const pais = safeStr(u?.pais || u?.country);
   const ciudad = safeStr(u?.ciudad || u?.city);
+return {
+  email: safeStr(u?.email),
+  nombres: safeStr(u?.nombre ?? u?.nombres ?? u?.nombre_completo),
+  apellidos: safeStr(u?.apellido ?? u?.apellidos),
+  telefono: safeStr(u?.telefono ?? u?.phone),
 
-  return {
-    email: safeStr(u?.email),
-    nombres: safeStr(u?.nombre || u?.nombres || u?.nombre_completo),
-    apellidos: safeStr(u?.apellido || u?.apellidos),
-    telefono: safeStr(u?.telefono || u?.phone),
+  timezone: safeStr(u?.timezone ?? u?.time_zone ?? u?.tz ?? ""),
 
-    fecha_nacimiento: safeStr(u?.fecha_nacimiento || u?.birth_date),
-    sexo: safeStr(u?.sexo || ""),
+  fecha_nacimiento: safeStr(u?.fecha_nacimiento ?? u?.birth_date),
+  sexo: safeStr(u?.sexo ?? ""),
 
-    titulo_profesional: safeStr(u?.titulo_profesional || u?.titulo),
-    especialidad_principal: safeStr(u?.especialidad_principal || u?.especialidad),
-    descripcion: safeStr(u?.descripcion),
-    frase_personal: safeStr(u?.frase_personal || u?.frase),
-    youtube_link: safeStr(u?.youtube_link || u?.link_video),
-    matricula_profesional: safeStr(u?.matricula_profesional || u?.matricula),
-    valor_sesion_base: safeStr(u?.valor_sesion_base || u?.tarifa_base),
+  titulo_profesional: safeStr(u?.titulo_profesional ?? u?.titulo),
+  especialidad_principal: safeStr(u?.especialidad_principal ?? u?.especialidad),
+  descripcion: safeStr(u?.descripcion),
+  frase_personal: safeStr(u?.frase_personal ?? u?.frase),
+  youtube_link: safeStr(u?.youtube_link ?? u?.link_video),
+  matricula_profesional: safeStr(u?.matricula_profesional ?? u?.matricula),
+  valor_sesion_base: safeStr(u?.valor_sesion_base ?? u?.tarifa_base),
 
-    pais,
-    ciudad,
+  pais,
+  ciudad,
 
-    foto_url: safeStr(u?.foto_perfil_link || u?.avatar_url || u?.link || u?.foto),
+  foto_url: safeStr(u?.foto_perfil_link ?? u?.avatar_url ?? u?.link ?? u?.foto),
 
-    raw: { session: u },
-  };
+  raw: { session: u },
+};
 }

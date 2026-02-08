@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import ActionResultModal from "../components/modals/ActionResultModal";
 import { useCuentasAdmin } from "../hooks/useCuentasAdmin";
 import { useTransaccionesAdmin } from "../hooks/useTransaccionesAdmin";
 import { useProductosAdmin } from "../../../productos/admin/hooks/useProductosAdmin";
@@ -20,7 +21,10 @@ function normalizeEstado(v) {
 
 function money(n) {
     const v = Number(n) || 0;
-    return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return v.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
 }
 
 function computeTotals(movs) {
@@ -140,6 +144,19 @@ export default function TransaccionPage({ session }) {
     const [draft, setDraft] = useState(buildEmptyDraft);
     const [isSaving, setIsSaving] = useState(false);
 
+    // Modal resultado (reemplazo de alert)
+    const [resultOpen, setResultOpen] = useState(false);
+    const [resultKind, setResultKind] = useState("info");
+    const [resultTitle, setResultTitle] = useState("");
+    const [resultMessage, setResultMessage] = useState("");
+
+    const showResult = (kind, message, title = "") => {
+        setResultKind(kind || "info");
+        setResultTitle(title || "");
+        setResultMessage(message || "");
+        setResultOpen(true);
+    };
+
     const isReadOnly = !!activeId; // ✅ si estás viendo transacción existente → inmutable
 
     // ✅ Citas realizadas (se cargan 1 vez)
@@ -189,7 +206,6 @@ export default function TransaccionPage({ session }) {
                         const paciente = r?.paciente_nombre ?? r?.nombre_paciente ?? r?.paciente ?? r?.nombre ?? "";
                         const producto = r?.producto_nombre ?? r?.nombre_producto ?? r?.producto ?? "";
 
-                        // ✅ label más corto (sin ISO completo)
                         const parts = [];
                         if (fecha) parts.push(fecha);
                         if (inicio || fin) parts.push(`${inicio || ""}${inicio && fin ? "-" : ""}${fin || ""}`.trim());
@@ -335,9 +351,31 @@ export default function TransaccionPage({ session }) {
         }));
     };
 
+    // ✅ MOD: bloquear selección de cuenta duplicada
     const onChangeMov = (idx, patch) => {
         if (isReadOnly) return;
+
         setDraft((d) => {
+            // si se intenta setear id_cuenta => validar duplicado en otras filas
+            if (Object.prototype.hasOwnProperty.call(patch || {}, "id_cuenta")) {
+                const nextId = patch?.id_cuenta ? Number(patch.id_cuenta) : null;
+
+                if (nextId) {
+                    const duplicated = (d.movimientos || []).some(
+                        (mm, i) => i !== idx && Number(mm?.id_cuenta) === nextId
+                    );
+
+                    if (duplicated) {
+                        showResult(
+                            "error",
+                            "Esa cuenta ya está seleccionada en otra línea. Elige otra.",
+                            "Cuenta duplicada"
+                        );
+                        return d; // no aplicar cambio
+                    }
+                }
+            }
+
             const next = [...(d.movimientos || [])];
             next[idx] = { ...next[idx], ...patch };
             return { ...d, movimientos: next };
@@ -349,31 +387,31 @@ export default function TransaccionPage({ session }) {
 
         if (isSaving) return;
         if (!session?.id_sesion) {
-            alert("Sesión inválida (id_sesion faltante)");
+            showResult("error", "Sesión inválida (id_sesion faltante)", "Ocurrió un problema");
             return;
         }
         if (!draft?.fecha) {
-            alert("Fecha es requerida");
+            showResult("error", "Fecha es requerida", "Ocurrió un problema");
             return;
         }
         if (!draft?.tipo_transaccion) {
-            alert("Tipo de documento / tipo_transaccion es requerido");
+            showResult("error", "Tipo de documento / tipo_transaccion es requerido", "Ocurrió un problema");
             return;
         }
 
         const isVenta = isVentaTipo(draft.tipo_transaccion);
         if (isVenta) {
             if (!draft?.id_producto) {
-                alert("Para una VENTA debes seleccionar un producto (id_producto)");
+                showResult("error", "Para una VENTA debes seleccionar un producto (id_producto)", "Ocurrió un problema");
                 return;
             }
             const cant = Number(draft?.cantidad);
             if (!Number.isFinite(cant) || cant <= 0) {
-                alert("Para una VENTA la cantidad debe ser mayor a 0");
+                showResult("error", "Para una VENTA la cantidad debe ser mayor a 0", "Ocurrió un problema");
                 return;
             }
             if (draft.id_cita && usedCitaIds.has(Number(draft.id_cita))) {
-                alert("Esa cita ya está usada en una transacción de venta. Selecciona otra.");
+                showResult("error", "Esa cita ya está usada en una transacción de venta. Selecciona otra.", "Ocurrió un problema");
                 return;
             }
         }
@@ -398,18 +436,18 @@ export default function TransaccionPage({ session }) {
         }
 
         if (movs.length < 2) {
-            alert("Debes registrar al menos 2 movimientos (con cuenta)");
+            showResult("error", "Debes registrar al menos 2 movimientos (con cuenta)", "Ocurrió un problema");
             return;
         }
 
         const { debe, haber } = computeTotals(movs);
 
         if (debe !== haber) {
-            alert("El asiento no está balanceado (Debe debe ser igual a Haber)");
+            showResult("error", "El asiento no está balanceado (Debe debe ser igual a Haber)", "Ocurrió un problema");
             return;
         }
         if (debe <= 0) {
-            alert("El total debe/haber debe ser mayor a 0");
+            showResult("error", "El total debe/haber debe ser mayor a 0", "Ocurrió un problema");
             return;
         }
 
@@ -489,7 +527,7 @@ export default function TransaccionPage({ session }) {
             fetchTransacciones({ offset: 0 });
             onNew();
         } catch (e) {
-            alert(e?.message || "Error al guardar asiento");
+            showResult("error", e?.message || "Error al guardar asiento", "Ocurrió un problema");
         } finally {
             setIsSaving(false);
         }
@@ -506,6 +544,15 @@ export default function TransaccionPage({ session }) {
 
     return (
         <main className="flex-grow p-0 max-w-screen-2xl mx-auto w-full">
+            {/* ✅ Modal resultado */}
+            <ActionResultModal
+                open={resultOpen}
+                kind={resultKind}
+                title={resultTitle}
+                message={resultMessage}
+                onClose={() => setResultOpen(false)}
+            />
+
             <div className="p-4">
                 <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
                     <span>Inicio</span>
@@ -595,9 +642,7 @@ export default function TransaccionPage({ session }) {
                                                     <div className="text-xs text-slate-400">#{r.id_transaccion}</div>
                                                 </td>
                                                 <td className="px-3 py-3 align-top">
-                                                    <div className="text-slate-800 font-medium text-xs sm:text-sm">
-                                                        {r.cuenta_nombre || "—"}
-                                                    </div>
+                                                    <div className="text-slate-800 font-medium text-xs sm:text-sm">{r.cuenta_nombre || "—"}</div>
                                                     <div className="text-xs text-slate-500 font-mono mt-0.5">{r.cuenta_codigo || ""}</div>
                                                 </td>
                                                 <td className="px-2 py-3 align-top text-right">
@@ -729,7 +774,9 @@ export default function TransaccionPage({ session }) {
                                                 ))}
                                             </select>
 
-                                            {isLoadingProductos ? <p className="text-xs text-slate-400 mt-1">Cargando productos...</p> : null}
+                                            {isLoadingProductos ? (
+                                                <p className="text-xs text-slate-400 mt-1">Cargando productos...</p>
+                                            ) : null}
                                             {errorProductos ? <p className="text-xs text-red-600 mt-1">{errorProductos}</p> : null}
                                         </div>
 
@@ -790,7 +837,9 @@ export default function TransaccionPage({ session }) {
 
                                             {!isReadOnly ? (
                                                 <>
-                                                    {isLoadingCitas ? <p className="text-xs text-slate-400 mt-1">Cargando citas realizadas...</p> : null}
+                                                    {isLoadingCitas ? (
+                                                        <p className="text-xs text-slate-400 mt-1">Cargando citas realizadas...</p>
+                                                    ) : null}
                                                     {errorCitas ? <p className="text-xs text-red-600 mt-1">{errorCitas}</p> : null}
                                                     {!isLoadingCitas && !errorCitas ? (
                                                         <p className="text-[11px] text-slate-500 mt-1">
@@ -862,6 +911,21 @@ export default function TransaccionPage({ session }) {
                                             m.id_movimiento ??
                                             `${m.id_cuenta ?? "null"}-${String(m.debe ?? "")}-${String(m.haber ?? "")}-${idx}`;
 
+                                        // ✅ MOD: filtrar opciones para evitar cuentas duplicadas en otras filas
+                                        const takenByOthers = new Set(
+                                            (draft.movimientos || [])
+                                                .map((mm, i) => (i !== idx ? Number(mm?.id_cuenta) || null : null))
+                                                .filter(Boolean)
+                                        );
+
+                                        const availableCuentas = (cuentas || []).filter((cc) => {
+                                            const id = Number(cc.id_cuenta);
+                                            // Mantener la cuenta actual visible (si es la elegida)
+                                            if (m?.id_cuenta && Number(m.id_cuenta) === id) return true;
+                                            // Ocultar si ya está tomada por otra fila
+                                            return !takenByOthers.has(id);
+                                        });
+
                                         return (
                                             <tr key={rowKey} className="group hover:bg-rose-50/30 transition-colors">
                                                 <td className="px-4 py-3 border-r border-slate-200 align-top font-mono text-sm text-slate-800">
@@ -877,9 +941,10 @@ export default function TransaccionPage({ session }) {
                                                         className="w-full h-full text-sm border-0 bg-transparent px-4 py-3 pr-8 focus:bg-white focus:ring-inset focus:ring-2 focus:ring-primary transition-all text-slate-800 font-medium truncate disabled:bg-slate-50"
                                                     >
                                                         <option value="">- Seleccionar cuenta -</option>
-                                                        {cuentas.map((c) => (
-                                                            <option key={c.id_cuenta} value={c.id_cuenta}>
-                                                                {c.codigo} — {c.nombre}
+
+                                                        {(availableCuentas || []).map((cc) => (
+                                                            <option key={cc.id_cuenta} value={cc.id_cuenta}>
+                                                                {cc.codigo} — {cc.nombre}
                                                             </option>
                                                         ))}
                                                     </select>

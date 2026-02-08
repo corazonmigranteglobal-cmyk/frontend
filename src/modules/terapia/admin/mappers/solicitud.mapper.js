@@ -6,6 +6,9 @@ export function mapSolicitudToUI(x) {
     const id = String(x.id_cita ?? x.id ?? "—");
     const estadoUpper = String(x.estado || "PENDIENTE").toUpperCase();
 
+    // Pago es un atributo independiente (no debe reemplazar el estado)
+    const pagado = Boolean(x.is_pagado ?? x.pagado ?? false);
+
     const nombre = x.paciente_nombre_completo || "Sin nombre";
     const correo = x.paciente_email || "—";
 
@@ -18,6 +21,10 @@ export function mapSolicitudToUI(x) {
         nombre,
         estado: estadoUpper,
         estadoBadgeClass: badgeByEstado(estadoUpper),
+
+        pagado,
+
+        pagado,
 
         fecha,
         hora,

@@ -13,7 +13,7 @@ export default function MissionSection({ data, uiById, onAction }) {
   const features = Array.isArray(data?.feature_cards) ? data.feature_cards : [];
   const link = data?.link || {};
   const image = data?.image || {};
-  console.log("data received on mission section: ", data)
+
 
   const imgAlt = image?.alt || "";
   const imgIdUi = image?.id_ui;
@@ -27,7 +27,7 @@ export default function MissionSection({ data, uiById, onAction }) {
   };
 
   const resolvedImgSrc = resolveUiUrl(imgIdUi) || imgSrc;
-  console.log("Img scr: ", imgSrc);
+
 
   // 3D tilt effect on image
   const imageTiltRef = useMouseTilt(6);

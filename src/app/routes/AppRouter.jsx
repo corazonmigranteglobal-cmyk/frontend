@@ -6,6 +6,8 @@ import PublicSignupPage from "../../modules/vistas_publicas/public/auth/PublicSi
 import PacienteDashboard from "../../modules/vistas_publicas/public/pages/PacienteDashboard.jsx";
 import TerapeutaDashboard from "../../modules/vistas_publicas/public/pages/TerapeutaDashboard.jsx";
 import BookingPage from "../../modules/vistas_publicas/public/pages/BookingPage.jsx";
+import PrivacyPage from "../../modules/vistas_publicas/public/pages/legal/PrivacyPage.jsx";
+import TermsPage from "../../modules/vistas_publicas/public/pages/legal/TermsPage.jsx";
 import AdminLoginRoute from "./AdminLoginRoute.jsx";
 import AdminLayout from "./AdminLayout.jsx";
 import RequireSession from "../auth/RequireSession.jsx";
@@ -15,6 +17,10 @@ export default function AppRouter() {
     <Routes>
       {/* Public */}
       <Route path="/" element={<LandingHome />} />
+
+      {/* Legal */}
+      <Route path="/privacidad" element={<PrivacyPage />} />
+      <Route path="/terminos" element={<TermsPage />} />
 
       {/* Public auth (Paciente y Terapeuta) */}
       <Route path="/paciente/login" element={<PublicLoginPage />} />

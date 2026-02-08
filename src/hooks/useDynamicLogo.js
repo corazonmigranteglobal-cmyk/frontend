@@ -30,14 +30,12 @@ export function useDynamicLogo({ idElemento = 1 } = {}) {
       setError("");
 
       const payload = {
-        id_elemento: idElemento,
-        p_id_elemento: idElemento,
+        id_pagina: import.meta.env.VITE_LANDING_ID_PAGE || 1,
       };
 
       // Algunos backends exponen este endpoint como POST, otros como GET.
       const tryMethods = [
-        () => createApiConn(UI_ENDPOINTS.UI_ELEMENTO_OBTENER, payload, "POST"),
-        () => createApiConn(UI_ENDPOINTS.UI_ELEMENTO_OBTENER, payload, "GET"),
+        () => createApiConn(UI_ENDPOINTS.UI_PAGINA_PUBLICA_BUNDLE, payload, "GET")
       ];
 
       let res = null;
@@ -62,19 +60,14 @@ export function useDynamicLogo({ idElemento = 1 } = {}) {
         return;
       }
 
-      const row =
-        (Array.isArray(res?.rows) && res.rows[0]) ||
-        res?.row ||
-        res?.data ||
-        res?.elemento ||
-        res;
+      const selected_info = res?.uiById?.[import.meta.env.VITE_ID_UI_LANDING_PAGE || 1];
 
       const url =
-        row?.link ||
-        row?.valor ||
-        row?.content_url ||
-        row?.url ||
-        (row?.metadata && (row.metadata.link || row.metadata.url)) ||
+        selected_info?.link ||
+        selected_info?.valor ||
+        selected_info?.content_url ||
+        selected_info?.url ||
+        (selected_info?.metadata && (selected_info.metadata.link || selected_info.metadata.url)) ||
         null;
 
       setLogoUrl(url && String(url).trim() ? String(url).trim() : fallback);

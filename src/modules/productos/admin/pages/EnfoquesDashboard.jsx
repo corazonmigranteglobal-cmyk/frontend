@@ -5,6 +5,7 @@ import EnfoqueDetail from "../components/EnfoqueDetail";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import SuccessModal from "../components/SuccessModal";
 import { useEnfoquesAdmin } from "../hooks/useEnfoquesAdmin";
+import ActionResultModal from "../../../../app/components/modals/ActionResultModal";
 
 export default function EnfoquesDashboard({ session, onLogout, activeTab, onNavigate }) {
     const { query, setQuery, filtered, selectedId, setSelectedId, draft, setDraft, isLoading, error, actions } = useEnfoquesAdmin(session);
@@ -17,6 +18,19 @@ export default function EnfoquesDashboard({ session, onLogout, activeTab, onNavi
     const [successOpen, setSuccessOpen] = useState(false);
     const [successTitle, setSuccessTitle] = useState("Cambios guardados");
     const [successMessage, setSuccessMessage] = useState("Los cambios fueron realizados correctamente.");
+
+    // Modal resultado (reemplazo de alert)
+    const [resultOpen, setResultOpen] = useState(false);
+    const [resultKind, setResultKind] = useState("info");
+    const [resultTitle, setResultTitle] = useState("");
+    const [resultMessage, setResultMessage] = useState("");
+
+    const showResult = (kind, message, title = "") => {
+        setResultKind(kind || "info");
+        setResultTitle(title || "");
+        setResultMessage(message || "");
+        setResultOpen(true);
+    };
 
     const extractOkMessage = (res) => {
         try {
@@ -40,6 +54,14 @@ export default function EnfoquesDashboard({ session, onLogout, activeTab, onNavi
     return (
         <div className="min-h-screen bg-background-light text-text-main-light antialiased">
             <HeaderAdmin session={session} onLogout={onLogout} activeTab={activeTab} onNavigate={onNavigate} />
+
+            <ActionResultModal
+                open={resultOpen}
+                kind={resultKind}
+                title={resultTitle}
+                message={resultMessage}
+                onClose={() => setResultOpen(false)}
+            />
 
             <ConfirmDeleteModal
                 isOpen={deleteOpen}
@@ -147,7 +169,7 @@ export default function EnfoquesDashboard({ session, onLogout, activeTab, onNavi
                                     setSuccessOpen(true);
                                 } catch (err) {
                                     console.error("[Enfoques] save error", err);
-                                    alert(err?.data?.message || err?.message || "No se pudo guardar el enfoque");
+                                    showResult("error", err?.data?.message || err?.message || "No se pudo guardar el enfoque", "Ocurrió un problema");
                                 } finally {
                                     setIsSaving(false);
                                 }

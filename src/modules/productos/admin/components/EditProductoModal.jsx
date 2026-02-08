@@ -31,10 +31,7 @@ export default function EditProductoModal({ isOpen, onClose, producto }) {
 
     const handleSave = () => {
         // NOTE: todavía no conectamos modificar (solo UI). Queda listo para enlazar.
-        console.log("[Productos] editar (pendiente endpoint)", {
-            id_producto: producto?.id,
-            ...form,
-        });
+        // NOTE: todavía no conectamos modificar (solo UI). Queda listo para enlazar.
         onClose?.();
     };
 

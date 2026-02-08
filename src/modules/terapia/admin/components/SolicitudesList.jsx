@@ -75,9 +75,16 @@ export default function SolicitudesList({
                                     <span className="text-[9px] font-bold text-primary/60 bg-primary/5 px-2 py-0.5 rounded tracking-tighter">
                                         {s.ref}
                                     </span>
-                                    <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${s.estadoBadgeClass}`}>
-                                        {s.estado}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${s.estadoBadgeClass}`}>
+                                            {s.estado}
+                                        </span>
+                                        {s.pagado ? (
+                                            <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-violet-700 text-white">
+                                                Pagado
+                                            </span>
+                                        ) : null}
+                                    </div>
                                 </div>
 
                                 <h4 className={`font-bold text-slate-900 text-lg ${!isSelected ? "group-hover:text-primary transition-colors" : ""}`}>

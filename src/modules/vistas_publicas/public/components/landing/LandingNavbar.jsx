@@ -124,6 +124,19 @@ export default function LandingNavbar({ data, uiById, onAction }) {
                   {cta_sign_up.label}
                 </button>
               ) : null}
+
+              {cta_login?.label ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    onAction?.("public_login", cta_login?.href);
+                  }}
+                  className="px-4 py-2 rounded-lg bg-white text-primary hover:bg-primary hover:text-white transition-colors shadow-soft"
+                >
+                  {cta_login.label}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

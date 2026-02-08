@@ -26,6 +26,19 @@ export default function UsersTable({
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
 
+    // Modal resultado (reemplazo de alert)
+    const [resultOpen, setResultOpen] = useState(false);
+    const [resultKind, setResultKind] = useState("info");
+    const [resultTitle, setResultTitle] = useState("");
+    const [resultMessage, setResultMessage] = useState("");
+
+    const showResult = (kind, message, title = "") => {
+        setResultKind(kind || "info");
+        setResultTitle(title || "");
+        setResultMessage(message || "");
+        setResultOpen(true);
+    };
+
     const handleModificar = (user) => {
         setEditingUser(user);
         setEditModalOpen(true);
@@ -37,8 +50,8 @@ export default function UsersTable({
     };
 
     const confirmDeactivate = async () => {
-        console.log("Desactivando usuario:", userToDeactivate);
-        alert("Pendiente: conectar con endpoint USUARIOS_ACTUALIZAR_ESTADO");
+
+        showResult("info", "Pendiente: conectar con endpoint USUARIOS_ACTUALIZAR_ESTADO", "Información");
         setDeactivateModalOpen(false);
         setUserToDeactivate(null);
     };
@@ -90,6 +103,14 @@ export default function UsersTable({
 
     return (
         <>
+            <ActionResultModal
+                open={resultOpen}
+                kind={resultKind}
+                title={resultTitle}
+                message={resultMessage}
+                onClose={() => setResultOpen(false)}
+            />
+
             <EditUserModal
                 isOpen={editModalOpen}
                 onClose={() => {
@@ -251,6 +272,7 @@ export default function UsersTable({
                             {pagedUsers.map((u) => {
                                 const inactive = u.status === "Inactivo";
                                 return (
+
                                     <tr
                                         key={u.id}
                                         className={inactive ? "bg-red-50/30" : "hover:bg-slate-50"}
@@ -297,7 +319,7 @@ export default function UsersTable({
                                                 <button
                                                     type="button"
                                                     className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
-                                                    onClick={() => alert("Pendiente: activar usuario")}
+                                                    onClick={() => showResult("info", "Pendiente: activar usuario", "Información")}
                                                 >
                                                     <span className="material-symbols-outlined text-sm align-middle mr-1">
                                                         check_circle
@@ -357,7 +379,7 @@ export default function UsersTable({
                                     </td>
                                 </tr>
                             )}
-                        </tbody>
+                        </tbody >
                     </table>
                 </div>
 

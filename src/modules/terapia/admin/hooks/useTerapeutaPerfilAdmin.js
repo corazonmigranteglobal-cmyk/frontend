@@ -50,6 +50,7 @@ const DEFAULT_PROFILE = {
   valor_sesion_base: "",
   pais: "",
   ciudad: "",
+  timezone: "",
   foto_url: "",
 };
 

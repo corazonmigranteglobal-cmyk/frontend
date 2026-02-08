@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useBooking } from "../hooks/useBooking";
+import { useSession } from "../../../../app/auth/SessionContext";
+import { createApiConn } from "../../../../helpers/api_conn_factory";
+import { UI_ENDPOINTS } from "../../../../config/UI_ENDPOINTS";
+import { USUARIOS_ENDPOINTS } from "../../../../config/USUARIOS_ENDPOINTS";
 
 /**
  * Página de reserva de citas terapéuticas
@@ -11,8 +15,108 @@ import { useBooking } from "../hooks/useBooking";
  * 4. Selección de fecha/hora
  * 5. Confirmación
  */
+
+// whatsappLink.js
+// “Blindado” para iPhone/Safari:
+// - Número limpio (solo dígitos)
+// - Texto en Unicode (emojis reales), sin pre-encoding
+// - Encode UNA sola vez
+// - Fallbacks: wa.me -> api.whatsapp.com -> window.location (si popup bloqueado)
+// - Opción: abrir en misma pestaña en iOS (muchas veces más estable)
+
+// whatsappLink.js
+
+// whatsappLink.js
+
+function onlyDigits(v) {
+    return String(v || "").replace(/\D/g, "");
+}
+
+function safeStr(v) {
+    return v === undefined || v === null ? "" : String(v);
+}
+
+// Emojis en Unicode escapes (blindado a encoding)
+const EMOJI = {
+    WAVE: "\u{1F44B}",          // 👋
+    YELLOW_HEART: "\u{1F49B}",  // 💛
+    RECEIPT: "\u{1F9FE}",       // 🧾
+    CHECK: "\u{2705}",          // ✅
+    PHONE: "\u{1F4F2}",         // 📲
+    PRAY: "\u{1F64F}",          // 🙏
+};
+
+export function buildWhatsAppUrl({ phoneNumber, message }) {
+    const phone = onlyDigits(phoneNumber);
+    if (!phone) {
+        throw new Error(
+            "VITE_WHATSAPP_NUMBER inválido. Debe ser solo dígitos (ej: 59178457347)."
+        );
+    }
+
+    const text = encodeURIComponent(safeStr(message));
+
+    // En iPhone suele ir mejor este endpoint que wa.me en algunos casos
+    return `https://api.whatsapp.com/send?phone=${phone}&text=${text}`;
+}
+
+export function openWhatsAppInBlank(url) {
+    const w = window.open(url, "_blank", "noopener,noreferrer");
+    return !!w;
+}
+
+export function openPaymentWhatsApp({ userNumber, sessionNumber, qrUrl } = {}) {
+    const phoneNumber = import.meta.env.VITE_WHATSAPP_NUMBER;
+
+    const lines = [
+        `Hola ${EMOJI.WAVE}`,
+        "",
+        `Quiero gestionar el pago de mi sesión en Corazón Migrante ${EMOJI.YELLOW_HEART}`,
+        "",
+        `${EMOJI.RECEIPT} Usuario: #${safeStr(userNumber)}`,
+        `${EMOJI.CHECK} Sesión: #${safeStr(sessionNumber)}`,
+        "",
+        `${EMOJI.PHONE} QR de pago: ${safeStr(qrUrl)}`,
+        "",
+        `¿Me ayudas a confirmarlo cuando esté realizado? ${EMOJI.PRAY}`,
+    ];
+
+    const message = lines.join("\n");
+    const url = buildWhatsAppUrl({ phoneNumber, message });
+    openWhatsAppInBlank(url);
+}
+
+/**
+ * Handler “flexible”:
+ * - handleOpenPaymentWhatsAppClick(e, params)
+ * - handleOpenPaymentWhatsAppClick(params)   <-- tu caso
+ */
+export function handleOpenPaymentWhatsAppClick(arg1, arg2) {
+    // Caso A: (params)
+    const looksLikeParamsOnly =
+        arg2 === undefined &&
+        arg1 &&
+        typeof arg1 === "object" &&
+        !("preventDefault" in arg1);
+
+    if (looksLikeParamsOnly) {
+        openPaymentWhatsApp(arg1);
+        return;
+    }
+
+    // Caso B: (event, params)
+    const e = arg1;
+    const params = arg2 || {};
+
+    if (e?.preventDefault) e.preventDefault();
+    if (e?.stopPropagation) e.stopPropagation();
+
+    openPaymentWhatsApp(params);
+}
+
 export default function BookingPage({ overridePacienteId = null, returnTo = null } = {}) {
     const navigate = useNavigate();
+    const { session } = useSession();
 
     const {
         loading,
@@ -40,6 +144,79 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
         return "/paciente/dashboard";
     }, [returnTo, overridePacienteId]);
 
+    // -------------------------
+    // Zonas horarias (IANA)
+    // -------------------------
+    const pacienteTimeZone = useMemo(() => {
+        try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        } catch {
+            return "UTC";
+        }
+    }, []);
+
+    const fmtTime = useCallback((iso, timeZone) => {
+        if (!iso) return "";
+        const d = new Date(iso);
+        return new Intl.DateTimeFormat("es-ES", {
+            timeZone,
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+        }).format(d);
+    }, []);
+
+    const fmtDateKey = useCallback((iso, timeZone) => {
+        if (!iso) return "";
+        const d = new Date(iso);
+        // en-CA => YYYY-MM-DD
+        return new Intl.DateTimeFormat("en-CA", {
+            timeZone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).format(d);
+    }, []);
+
+    function looksLikeUnsignedPrivateGcsUrl(url) {
+        const s = String(url || "").trim();
+        if (!s) return false;
+        const isGcs = s.startsWith("https://storage.googleapis.com/");
+        if (!isGcs) return false;
+        const hasSignature = /X-Goog-Signature=/i.test(s) || /X-Goog-Credential=/i.test(s);
+        return !hasSignature;
+    }
+
+    // ✅ Extrae foto desde la respuesta REAL que tú pegaste (y también soporta el formato "rows")
+    function pickFotoFromTerapeutaResponse(res) {
+        // Caso A: respuesta directa (top-level)
+        const direct =
+            res?.foto_url ||
+            res?.foto_perfil_link ||
+            res?.raw?.usuario?.foto_perfil_link ||
+            res?.raw?.usuario?.foto_url ||
+            "";
+
+        if (direct) return String(direct).trim();
+
+        // Caso B: respuesta envuelta en rows/api_usuario_*_obtener
+        const row = res?.rows?.[0];
+        if (row && typeof row === "object") {
+            const key = Object.keys(row).find((k) => k.startsWith("api_usuario_") && k.endsWith("_obtener"));
+            const apiPayload = key ? row?.[key] : null;
+
+            const wrapped =
+                apiPayload?.data?.usuario?.foto_perfil_link ||
+                apiPayload?.data?.usuario?.avatar_url ||
+                apiPayload?.data?.usuario?.foto_url ||
+                "";
+
+            if (wrapped) return String(wrapped).trim();
+        }
+
+        return "";
+    }
+
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
         enfoque: null,
@@ -48,12 +225,44 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
         fecha: "",
         horaInicio: "",
         horaFin: "",
+        inicioISO: "", // instante real (ISO) del slot seleccionado
+        finISO: "", // instante real (ISO) del slot seleccionado
+        tzTerapeuta: "",
+        fechaTerapeuta: "",
+        horaInicioTerapeuta: "",
+        horaFinTerapeuta: "",
         notas: "",
     });
 
     const [submitLoading, setSubmitLoading] = useState(false);
     const [submitError, setSubmitError] = useState(null);
     const [success, setSuccess] = useState(false);
+
+    const [waPaymentQrUrl, setWaPaymentQrUrl] = useState("");
+    const [waPaymentLoading, setWaPaymentLoading] = useState(false);
+
+    const [terapeutaAvatarById, setTerapeutaAvatarById] = useState({});
+
+    // ✅ Resolver imagen de enfoque (para Step 2, Step 5 y Success)
+    const resolveEnfoqueImg = useCallback((enf) => {
+        return enf?.image_url || enf?.foto_link || "";
+    }, []);
+
+    const resolveTerapeutaAvatarUrl = useCallback(
+        (ter) => {
+            const id = ter?.id_usuario;
+            const fromMap = id != null ? terapeutaAvatarById[String(id)] : "";
+            return (
+                fromMap ||
+                ter?.foto_url || // ✅ agrega soporte
+                ter?.avatarUrl ||
+                ter?.image_url ||
+                ter?.foto_perfil_link ||
+                ""
+            );
+        },
+        [terapeutaAvatarById]
+    );
 
     // Load bootstrap data on mount
     useEffect(() => {
@@ -74,45 +283,60 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
         }
     }, [formData.terapeuta, step, getDisponibilidad, bootstrapData]);
 
-    const updateForm = useCallback(
-        (field, value) => {
-            setFormData((prev) => {
-                // resets encadenados cuando cambia algo "arriba" en el flujo
-                if (field === "producto") {
-                    return {
-                        ...prev,
-                        producto: value,
-                        // enfoque se setea afuera (onClick) para poder resolver default
-                        terapeuta: null,
-                        fecha: "",
-                        horaInicio: "",
-                        horaFin: "",
-                    };
-                }
-                if (field === "enfoque") {
-                    return {
-                        ...prev,
-                        enfoque: value,
-                        terapeuta: null,
-                        fecha: "",
-                        horaInicio: "",
-                        horaFin: "",
-                    };
-                }
-                if (field === "terapeuta") {
-                    return {
-                        ...prev,
-                        terapeuta: value,
-                        fecha: "",
-                        horaInicio: "",
-                        horaFin: "",
-                    };
-                }
-                return { ...prev, [field]: value };
-            });
-        },
-        []
-    );
+    const updateForm = useCallback((field, value) => {
+        setFormData((prev) => {
+            // resets encadenados cuando cambia algo "arriba" en el flujo
+            if (field === "producto") {
+                return {
+                    ...prev,
+                    producto: value,
+                    // enfoque se setea afuera (onClick) para poder resolver default
+                    terapeuta: null,
+                    fecha: "",
+                    horaInicio: "",
+                    horaFin: "",
+                    inicioISO: "",
+                    finISO: "",
+                    tzTerapeuta: "",
+                    fechaTerapeuta: "",
+                    horaInicioTerapeuta: "",
+                    horaFinTerapeuta: "",
+                };
+            }
+            if (field === "enfoque") {
+                return {
+                    ...prev,
+                    enfoque: value,
+                    terapeuta: null,
+                    fecha: "",
+                    horaInicio: "",
+                    horaFin: "",
+                    inicioISO: "",
+                    finISO: "",
+                    tzTerapeuta: "",
+                    fechaTerapeuta: "",
+                    horaInicioTerapeuta: "",
+                    horaFinTerapeuta: "",
+                };
+            }
+            if (field === "terapeuta") {
+                return {
+                    ...prev,
+                    terapeuta: value,
+                    fecha: "",
+                    horaInicio: "",
+                    horaFin: "",
+                    inicioISO: "",
+                    finISO: "",
+                    tzTerapeuta: "",
+                    fechaTerapeuta: "",
+                    horaInicioTerapeuta: "",
+                    horaFinTerapeuta: "",
+                };
+            }
+            return { ...prev, [field]: value };
+        });
+    }, []);
 
     const nextStep = () => setStep((s) => Math.min(s + 1, 5));
     const prevStep = () => setStep((s) => Math.max(s - 1, 1));
@@ -130,9 +354,11 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                 idTerapeuta: formData.terapeuta.id_usuario,
                 idProducto: formData.producto.id_producto,
                 idEnfoque: formData.enfoque.id_enfoque,
-                fecha: formData.fecha,
+                fecha: formData.fechaTerapeuta || formData.fecha,
                 horaInicio: formData.horaInicio,
                 horaFin: formData.horaFin,
+                inicioISO: formData.inicioISO,
+                finISO: formData.finISO,
                 notas: formData.notas,
             });
             setSuccess(true);
@@ -142,6 +368,99 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
             setSubmitLoading(false);
         }
     };
+
+    // ✅ Hook: obtener QR de pago cuando success = true
+    useEffect(() => {
+        let mounted = true;
+
+        const run = async () => {
+            if (!success) return;
+            if (!session?.user_id || !session?.id_sesion) return;
+
+            setWaPaymentLoading(true);
+            try {
+                const payload = {
+                    p_actor_user_id: session.user_id,
+                    p_id_sesion: session.id_sesion,
+                    p_id_elemento: 16,
+                };
+
+                const res = await createApiConn(UI_ENDPOINTS.UI_ELEMENTO_OBTENER, payload, "POST", session);
+
+                const row = res?.rows?.[0] || {};
+                const url = row?.link || row?.metadata?.url || "";
+                if (mounted) setWaPaymentQrUrl(String(url || ""));
+            } catch (e) {
+                if (mounted) setWaPaymentQrUrl("");
+            } finally {
+                if (mounted) setWaPaymentLoading(false);
+            }
+        };
+
+        run();
+        return () => {
+            mounted = false;
+        };
+    }, [success, session]);
+
+    // ✅ Hook: resolver avatars privados GCS
+    useEffect(() => {
+        let cancelled = false;
+
+        const run = async () => {
+            if (!session?.user_id || !session?.id_sesion) return;
+            const list = Array.isArray(bootstrapData?.terapeutas) ? bootstrapData.terapeutas : [];
+            if (!list.length) return;
+
+            const pending = list
+                .map((t) => ({
+                    id: t?.id_usuario,
+                    url: t?.foto_url || t?.image_url || t?.foto_perfil_link || "", // ✅ incluye foto_url
+                }))
+                .filter((x) => x.id != null && looksLikeUnsignedPrivateGcsUrl(x.url))
+                .filter((x) => !terapeutaAvatarById[String(x.id)]);
+
+            if (!pending.length) return;
+
+            try {
+                const results = await Promise.allSettled(
+                    pending.map(async ({ id }) => {
+                        const payload = {
+                            p_actor_user_id: session.user_id,
+                            p_id_sesion: session.id_sesion,
+                            p_user_id: id,
+                        };
+
+                        // 👇 Mantengo tu método y endpoint tal cual lo tenías
+                        const res = await createApiConn(USUARIOS_ENDPOINTS.OBTENER_TERAPEUTA, payload, "PATCH", session);
+
+                        const foto = pickFotoFromTerapeutaResponse(res);
+                        return { id, foto };
+                    })
+                );
+
+                if (cancelled) return;
+
+                const next = {};
+                for (const r of results) {
+                    if (r.status !== "fulfilled") continue;
+                    const { id, foto } = r.value || {};
+                    if (!id || !foto) continue;
+                    next[String(id)] = foto;
+                }
+                if (Object.keys(next).length) {
+                    setTerapeutaAvatarById((prev) => ({ ...prev, ...next }));
+                }
+            } catch {
+                // silent
+            }
+        };
+
+        run();
+        return () => {
+            cancelled = true;
+        };
+    }, [bootstrapData?.terapeutas, session, terapeutaAvatarById]);
 
     const slotsFromBootstrap = useMemo(() => {
         const tid = formData.terapeuta?.id_usuario;
@@ -153,31 +472,46 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
         // Normaliza a la misma forma que getDisponibilidad
         return raw
             .map((h) => {
-                const fecha = h?.fecha ? String(h.fecha).split("T")[0] : (h?.inicio ? String(h.inicio).split("T")[0] : null);
                 const inicio = h?.inicio || null;
                 const fin = h?.fin || null;
-                const hora_inicio = inicio
-                    ? new Date(inicio).toLocaleTimeString("es-ES", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false,
-                    })
-                    : null;
-                const hora_fin = fin
-                    ? new Date(fin).toLocaleTimeString("es-ES", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false,
-                    })
-                    : null;
-                return { ...h, fecha, hora_inicio, hora_fin, disponible: true };
+
+                // Fecha/hora se muestran en la zona del paciente (navegador).
+                const fecha = inicio
+                    ? fmtDateKey(inicio, pacienteTimeZone)
+                    : h?.fecha
+                        ? String(h.fecha).split("T")[0]
+                        : null;
+
+                const hora_inicio = inicio ? fmtTime(inicio, pacienteTimeZone) : null;
+                const hora_fin = fin ? fmtTime(fin, pacienteTimeZone) : null;
+
+                // Zona del terapeuta (si está disponible)
+                const tzTerapeuta = h?.time_zone || h?.metadata?.time_zone || formData?.terapeuta?.time_zone || null;
+
+                const hora_inicio_terapeuta = tzTerapeuta ? (inicio ? fmtTime(inicio, tzTerapeuta) : null) : null;
+                const hora_fin_terapeuta = tzTerapeuta ? (fin ? fmtTime(fin, tzTerapeuta) : null) : null;
+
+                return {
+                    ...h,
+                    fecha,
+                    fecha_terapeuta: tzTerapeuta && inicio ? fmtDateKey(inicio, tzTerapeuta) : null,
+                    hora_inicio,
+                    hora_fin,
+                    tz_paciente: pacienteTimeZone,
+                    tz_terapeuta: tzTerapeuta,
+                    hora_inicio_terapeuta,
+                    hora_fin_terapeuta,
+                    disponible: true,
+                };
             })
             .filter((x) => x.fecha && x.hora_inicio && x.hora_fin);
-    }, [bootstrapData, formData.terapeuta]);
+    }, [bootstrapData, formData.terapeuta, pacienteTimeZone, fmtTime, fmtDateKey]);
 
     // Group horarios by date (preferimos bootstrap para evitar llamada)
     const groupedHorarios = useMemo(() => {
-        const arr = (slotsFromBootstrap?.length ? slotsFromBootstrap : (Array.isArray(disponibilidad) ? disponibilidad : [])) || [];
+        const arr =
+            (slotsFromBootstrap?.length ? slotsFromBootstrap : Array.isArray(disponibilidad) ? disponibilidad : []) || [];
+
         return arr.reduce((acc, h) => {
             if (!h?.fecha) return acc;
             if (!acc[h.fecha]) acc[h.fecha] = [];
@@ -192,22 +526,18 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-gray-900 dark:via-gray-950 dark:to-black flex items-center justify-center p-4">
                 <div className="max-w-md w-full text-center">
                     <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-6">
-                        <span className="material-symbols-outlined text-green-600 dark:text-green-400 text-4xl">
-                            check_circle
-                        </span>
+                        <span className="material-symbols-outlined text-green-600 dark:text-green-400 text-4xl">check_circle</span>
                     </div>
 
                     <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-3">¡Cita Agendada!</h1>
-                    <p className="text-slate-600 dark:text-slate-300 mb-2">
-                        Tu cita ha sido registrada exitosamente.
-                    </p>
+                    <p className="text-slate-600 dark:text-slate-300 mb-2">Tu cita ha sido registrada exitosamente.</p>
 
                     <div className="bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-2xl p-4 mb-6">
                         <div className="flex items-center justify-center gap-3 mb-3">
                             <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
-                                {formData.enfoque?.image_url ? (
+                                {resolveEnfoqueImg(formData.enfoque) ? (
                                     <img
-                                        src={formData.enfoque.image_url}
+                                        src={resolveEnfoqueImg(formData.enfoque)}
                                         alt={formData.enfoque?.nombre || "Enfoque"}
                                         className="w-full h-full object-cover"
                                         loading="lazy"
@@ -216,10 +546,11 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                     <span className="material-symbols-outlined text-primary">psychology</span>
                                 )}
                             </div>
+
                             <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
-                                {formData.terapeuta?.image_url || formData.terapeuta?.foto_perfil_link ? (
+                                {resolveTerapeutaAvatarUrl(formData.terapeuta) ? (
                                     <img
-                                        src={formData.terapeuta?.image_url || formData.terapeuta?.foto_perfil_link}
+                                        src={resolveTerapeutaAvatarUrl(formData.terapeuta)}
                                         alt={formData.terapeuta?.nombre || "Terapeuta"}
                                         className="w-full h-full object-cover"
                                         loading="lazy"
@@ -229,6 +560,7 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                 )}
                             </div>
                         </div>
+
                         <p className="text-sm text-slate-500 dark:text-slate-400">
                             Fecha: <strong className="text-slate-800 dark:text-white">{formData.fecha}</strong>
                         </p>
@@ -240,19 +572,40 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                         </p>
                         <p className="text-sm text-slate-500 dark:text-slate-400">
                             Terapeuta:{" "}
-                            <strong className="text-slate-800 dark:text-white">
-                                {formData.terapeuta?.nombre || "Asignado"}
-                            </strong>
+                            <strong className="text-slate-800 dark:text-white">{formData.terapeuta?.nombre || "Asignado"}</strong>
                         </p>
                         <p className="text-sm text-slate-500 dark:text-slate-400">
                             Enfoque:{" "}
-                            <strong className="text-slate-800 dark:text-white">
-                                {formData.enfoque?.nombre || "Asignado"}
-                            </strong>
+                            <strong className="text-slate-800 dark:text-white">{formData.enfoque?.nombre || "Asignado"}</strong>
                         </p>
                     </div>
 
-                    {/* ✅ Navegación segura */}
+                    <div className="flex flex-col gap-3 mb-4">
+                        <button
+                            type="button"
+                            disabled={waPaymentLoading || !session?.user_id || !session?.id_sesion}
+                            onClick={() => {
+                                handleOpenPaymentWhatsAppClick({
+                                    userNumber: session?.user_id,
+                                    sessionNumber: session?.id_sesion,
+                                    qrUrl: waPaymentQrUrl,
+                                })
+                            }}
+                            className={`inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold transition-colors border ${waPaymentLoading
+                                ? "bg-slate-100 text-slate-500 border-black/10 dark:bg-white/5 dark:text-slate-400 dark:border-white/10"
+                                : "bg-green-600 text-white border-green-700/20 hover:bg-green-700"
+                                }`}
+                            title={waPaymentLoading ? "Cargando QR de pago..." : "Abrir WhatsApp"}
+                        >
+                            <span className="material-symbols-outlined">chat</span>
+                            Gestionar pago
+                        </button>
+
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Se abrirá WhatsApp con un mensaje listo y el enlace del QR para realizar el pago.
+                        </p>
+                    </div>
+
                     <button
                         type="button"
                         onClick={() => navigate(effectiveReturnTo, { replace: true })}
@@ -295,15 +648,11 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                         <div key={s} className="flex items-center flex-1">
                             <div
                                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step >= s
-                                        ? "bg-primary text-white"
-                                        : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                                    ? "bg-primary text-white"
+                                    : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
                                     }`}
                             >
-                                {step > s ? (
-                                    <span className="material-symbols-outlined text-[16px]">check</span>
-                                ) : (
-                                    s
-                                )}
+                                {step > s ? <span className="material-symbols-outlined text-[16px]">check</span> : s}
                             </div>
 
                             {s < 5 && (
@@ -362,15 +711,13 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                     updateForm("enfoque", enf);
                                 }}
                                 className={`text-left p-5 rounded-2xl border transition-all ${formData.producto?.id_producto === prod.id_producto
-                                        ? "border-primary bg-primary/5 shadow-md"
-                                        : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
+                                    ? "border-primary bg-primary/5 shadow-md"
+                                    : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
                                     }`}
                             >
                                 <div className="flex items-start gap-4">
                                     <div
-                                        className={`w-12 h-12 rounded-xl flex items-center justify-center ${formData.producto?.id_producto === prod.id_producto
-                                                ? "bg-primary/20"
-                                                : "bg-slate-100 dark:bg-slate-800"
+                                        className={`w-12 h-12 rounded-xl flex items-center justify-center ${formData.producto?.id_producto === prod.id_producto ? "bg-primary/20" : "bg-slate-100 dark:bg-slate-800"
                                             }`}
                                     >
                                         <span className="material-symbols-outlined text-primary">spa</span>
@@ -403,25 +750,21 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                 {step === 2 && !loading && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {(bootstrapData?.enfoques || []).map((enf) => {
-                            const img = enf?.image_url || enf?.foto_link || null;
+                            const img = resolveEnfoqueImg(enf);
+
                             return (
                                 <button
                                     key={enf.id_enfoque}
                                     onClick={() => updateForm("enfoque", enf)}
                                     className={`text-left p-5 rounded-2xl border transition-all ${formData.enfoque?.id_enfoque === enf.id_enfoque
-                                            ? "border-primary bg-primary/5 shadow-md"
-                                            : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
+                                        ? "border-primary bg-primary/5 shadow-md"
+                                        : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
                                         }`}
                                 >
                                     <div className="flex items-start gap-4">
                                         <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
                                             {img ? (
-                                                <img
-                                                    src={img}
-                                                    alt={enf.nombre}
-                                                    className="w-full h-full object-cover"
-                                                    loading="lazy"
-                                                />
+                                                <img src={img} alt={enf.nombre} className="w-full h-full object-cover" loading="lazy" />
                                             ) : (
                                                 <span className="material-symbols-outlined text-primary text-2xl">psychology</span>
                                             )}
@@ -458,15 +801,15 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                 key={ter.id_usuario}
                                 onClick={() => updateForm("terapeuta", ter)}
                                 className={`text-left p-5 rounded-2xl border transition-all ${formData.terapeuta?.id_usuario === ter.id_usuario
-                                        ? "border-primary bg-primary/5 shadow-md"
-                                        : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
+                                    ? "border-primary bg-primary/5 shadow-md"
+                                    : "border-black/5 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary/50"
                                     }`}
                             >
                                 <div className="flex items-start gap-4">
                                     <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
-                                        {ter?.image_url || ter?.foto_perfil_link ? (
+                                        {resolveTerapeutaAvatarUrl(ter) ? (
                                             <img
-                                                src={ter?.image_url || ter?.foto_perfil_link}
+                                                src={resolveTerapeutaAvatarUrl(ter)}
                                                 alt={ter?.nombre || "Terapeuta"}
                                                 className="w-full h-full object-cover"
                                                 loading="lazy"
@@ -475,19 +818,20 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                             <span className="material-symbols-outlined text-primary text-2xl">person</span>
                                         )}
                                     </div>
+
                                     <div className="flex-1">
                                         <h3 className="font-bold text-slate-800 dark:text-white mb-1">
                                             {ter.nombre || `Terapeuta #${ter.id_usuario}`}
                                         </h3>
-                                        <p className="text-sm text-slate-500 dark:text-slate-400">
-                                            {ter.especialidad || "Psicología clínica"}
-                                        </p>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">{ter.especialidad || "Psicología clínica"}</p>
+
                                         {ter.enfoque && (
                                             <span className="inline-block mt-2 px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
                                                 {ter.enfoque}
                                             </span>
                                         )}
                                     </div>
+
                                     {formData.terapeuta?.id_usuario === ter.id_usuario && (
                                         <span className="material-symbols-outlined text-primary">check_circle</span>
                                     )}
@@ -522,6 +866,7 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                             })}
                                         </h3>
                                     </div>
+
                                     <div className="p-4 flex flex-wrap gap-2">
                                         {horarios.map((h, idx) => (
                                             <button
@@ -530,13 +875,31 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                                     updateForm("fecha", h.fecha);
                                                     updateForm("horaInicio", h.hora_inicio);
                                                     updateForm("horaFin", h.hora_fin);
+
+                                                    // ✅ Guardamos también el rango en TZ del terapeuta para validaciones del back
+                                                    updateForm("tzTerapeuta", h.tz_terapeuta || "");
+                                                    updateForm("fechaTerapeuta", h.fecha_terapeuta || (h.inicio && h.tz_terapeuta ? fmtDateKey(h.inicio, h.tz_terapeuta) : ""));
+                                                    updateForm("horaInicioTerapeuta", h.hora_inicio_terapeuta || "");
+                                                    updateForm("horaFinTerapeuta", h.hora_fin_terapeuta || "");
+
+                                                    updateForm("inicioISO", h.inicio || "");
+                                                    updateForm("finISO", h.fin || "");
                                                 }}
                                                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${formData.fecha === h.fecha && formData.horaInicio === h.hora_inicio
-                                                        ? "bg-primary text-white shadow-md"
-                                                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-primary/10"
+                                                    ? "bg-primary text-white shadow-md"
+                                                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-primary/10"
                                                     }`}
                                             >
-                                                {h.hora_inicio} - {h.hora_fin}
+                                                <div className="flex flex-col leading-tight">
+                                                    <span>
+                                                        {h.hora_inicio} - {h.hora_fin}
+                                                    </span>
+                                                    {h.tz_terapeuta && h.hora_inicio_terapeuta && h.tz_terapeuta !== h.tz_paciente ? (
+                                                        <span className="text-[11px] opacity-80">
+                                                            {h.hora_inicio_terapeuta} - {h.hora_fin_terapeuta} ({h.tz_terapeuta})
+                                                        </span>
+                                                    ) : null}
+                                                </div>
                                             </button>
                                         ))}
                                     </div>
@@ -563,9 +926,9 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                             <div className="p-6 space-y-4">
                                 <div className="flex items-center gap-3">
                                     <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
-                                        {formData.enfoque?.image_url ? (
+                                        {resolveEnfoqueImg(formData.enfoque) ? (
                                             <img
-                                                src={formData.enfoque.image_url}
+                                                src={resolveEnfoqueImg(formData.enfoque)}
                                                 alt={formData.enfoque?.nombre || "Enfoque"}
                                                 className="w-full h-full object-cover"
                                                 loading="lazy"
@@ -574,10 +937,11 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                             <span className="material-symbols-outlined text-primary">psychology</span>
                                         )}
                                     </div>
+
                                     <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
-                                        {formData.terapeuta?.image_url || formData.terapeuta?.foto_perfil_link ? (
+                                        {resolveTerapeutaAvatarUrl(formData.terapeuta) ? (
                                             <img
-                                                src={formData.terapeuta?.image_url || formData.terapeuta?.foto_perfil_link}
+                                                src={resolveTerapeutaAvatarUrl(formData.terapeuta)}
                                                 alt={formData.terapeuta?.nombre || "Terapeuta"}
                                                 className="w-full h-full object-cover"
                                                 loading="lazy"
@@ -586,6 +950,7 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                             <span className="material-symbols-outlined text-primary">person</span>
                                         )}
                                     </div>
+
                                     <div className="text-sm text-slate-600 dark:text-slate-300">
                                         <div className="font-semibold text-slate-800 dark:text-white line-clamp-1">
                                             {formData.terapeuta?.nombre || "Terapeuta"}
@@ -595,13 +960,12 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                         </div>
                                     </div>
                                 </div>
+
                                 <div className="flex items-center gap-3">
                                     <span className="material-symbols-outlined text-primary">spa</span>
                                     <div>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">Servicio</p>
-                                        <p className="font-semibold text-slate-800 dark:text-white">
-                                            {formData.producto?.nombre || "No seleccionado"}
-                                        </p>
+                                        <p className="font-semibold text-slate-800 dark:text-white">{formData.producto?.nombre || "No seleccionado"}</p>
                                     </div>
                                 </div>
 
@@ -609,9 +973,7 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                     <span className="material-symbols-outlined text-primary">psychology</span>
                                     <div>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">Enfoque</p>
-                                        <p className="font-semibold text-slate-800 dark:text-white">
-                                            {formData.enfoque?.nombre || "No seleccionado"}
-                                        </p>
+                                        <p className="font-semibold text-slate-800 dark:text-white">{formData.enfoque?.nombre || "No seleccionado"}</p>
                                     </div>
                                 </div>
 
@@ -619,9 +981,7 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                                     <span className="material-symbols-outlined text-primary">person</span>
                                     <div>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">Terapeuta</p>
-                                        <p className="font-semibold text-slate-800 dark:text-white">
-                                            {formData.terapeuta?.nombre || "No seleccionado"}
-                                        </p>
+                                        <p className="font-semibold text-slate-800 dark:text-white">{formData.terapeuta?.nombre || "No seleccionado"}</p>
                                     </div>
                                 </div>
 
@@ -695,8 +1055,8 @@ export default function BookingPage({ overridePacienteId = null, returnTo = null
                             onClick={prevStep}
                             disabled={step === 1}
                             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${step === 1
-                                    ? "opacity-50 cursor-not-allowed text-slate-400"
-                                    : "text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10"
+                                ? "opacity-50 cursor-not-allowed text-slate-400"
+                                : "text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10"
                                 }`}
                         >
                             <span className="material-symbols-outlined">arrow_back</span>

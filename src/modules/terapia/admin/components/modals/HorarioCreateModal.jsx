@@ -19,20 +19,33 @@ function toHms(v) {
   return s;
 }
 
-export default function HorarioCreateModal({ open, onClose, onSubmit, isSaving = false }) {
+export default function HorarioCreateModal({ open, onClose, onSubmit, isSaving = false, defaultTimeZone = null }) {
   const [dia, setDia] = useState(1);
   const [inicio, setInicio] = useState("09:00");
   const [fin, setFin] = useState("12:00");
   const [tipo, setTipo] = useState("INDIVIDUAL");
   const [canal, setCanal] = useState("ONLINE");
   const [ubicacion, setUbicacion] = useState("Google Meet");
+  const [timeZone, setTimeZone] = useState(() => {
+    if (defaultTimeZone && String(defaultTimeZone).trim()) return String(defaultTimeZone).trim();
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/La_Paz";
+    } catch {
+      return "America/La_Paz";
+    }
+  });
+
   const [nota, setNota] = useState("");
   const [localError, setLocalError] = useState(null);
 
   useEffect(() => {
     if (!open) return;
     setLocalError(null);
-  }, [open]);
+    // ✅ Al abrir, respetar la TZ del terapeuta si viene desde el perfil
+    if (defaultTimeZone && String(defaultTimeZone).trim()) {
+      setTimeZone(String(defaultTimeZone).trim());
+    }
+  }, [open, defaultTimeZone]);
 
   const resumen = useMemo(() => {
     const label = DAYS.find((d) => d.value === Number(dia))?.label || "";
@@ -149,6 +162,31 @@ export default function HorarioCreateModal({ open, onClose, onSubmit, isSaving =
 
             <div className="md:col-span-2">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                Zona horaria (IANA)
+              </label>
+              <select
+                value={timeZone}
+                onChange={(e) => setTimeZone(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-[18px] py-3 px-4 text-slate-700 text-sm focus:ring-primary/20 focus:border-primary transition-all"
+              >
+                <option value="America/La_Paz">America/La_Paz (Bolivia)</option>
+                <option value="America/Lima">America/Lima (Perú)</option>
+                <option value="America/Santiago">America/Santiago (Chile)</option>
+                <option value="America/Bogota">America/Bogota (Colombia)</option>
+                <option value="America/Mexico_City">America/Mexico_City (México)</option>
+                <option value="America/New_York">America/New_York (USA Este)</option>
+                <option value="America/Los_Angeles">America/Los_Angeles (USA Pacífico)</option>
+                <option value="Europe/Madrid">Europe/Madrid (España)</option>
+                <option value="Europe/London">Europe/London (UK)</option>
+                <option value="UTC">UTC</option>
+              </select>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Las horas que registres se interpretan en esta zona. (Luego se convierten a UTC para mostrar a pacientes en su hora local).
+              </p>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">
                 Nota (opcional)
               </label>
               <textarea
@@ -189,6 +227,7 @@ export default function HorarioCreateModal({ open, onClose, onSubmit, isSaving =
                 p_ubicacion: ubicacion || "",
                 p_metadata: {
                   fuente: "ui",
+                  time_zone: timeZone,
                   ...(nota ? { nota } : {}),
                 },
               };

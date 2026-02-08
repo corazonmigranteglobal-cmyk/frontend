@@ -7,6 +7,19 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
     const [loading, setLoading] = useState(true);
     const [userType, setUserType] = useState(null); // "admin" | "terapeuta"
 
+    // Result modal (reemplaza alert/confirm)
+    const [resultOpen, setResultOpen] = useState(false);
+    const [resultKind, setResultKind] = useState("info");
+    const [resultTitle, setResultTitle] = useState("");
+    const [resultMessage, setResultMessage] = useState("");
+
+    const showResult = (kind, message, title = "") => {
+        setResultKind(kind || "info");
+        setResultTitle(title || "");
+        setResultMessage(message || "");
+        setResultOpen(true);
+    };
+
     // Common fields
     const [email, setEmail] = useState("");
     const [nombre, setNombre] = useState("");
@@ -73,7 +86,7 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
                 };
 
                 const response = await createApiConn(endpoint, payload, "PATCH");
-                console.log("User data response:", response);
+
 
                 if (response && response.rows && response.rows.length > 0) {
                     const row = response.rows[0];
@@ -187,13 +200,13 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
 
                 const ok = response?.rows?.[0]?.status === "ok" || response?.status === "ok" || response?.ok === true;
                 if (ok) {
-                    alert("Terapeuta actualizado exitosamente.");
+                    showResult("success", "Terapeuta actualizado exitosamente.", "Listo");
                     onClose();
                     return;
                 }
 
                 const msg = response?.rows?.[0]?.message || response?.message || "Error al actualizar terapeuta.";
-                alert(msg);
+                showResult("error", msg, "Ocurrió un problema");
             } else if (userType === "admin") {
                 const payload = {
                     p_actor_user_id: session.user_id,
@@ -216,17 +229,17 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
 
                 const ok = response?.rows?.[0]?.status === "ok" || response?.status === "ok" || response?.ok === true;
                 if (ok) {
-                    alert("Administrador actualizado exitosamente.");
+                    showResult("success", "Administrador actualizado exitosamente.", "Listo");
                     onClose();
                     return;
                 }
 
                 const msg = response?.rows?.[0]?.message || response?.message || "Error al actualizar administrador.";
-                alert(msg);
+                showResult("error", msg, "Ocurrió un problema");
             }
         } catch (err) {
             console.error("Error en actualización:", err);
-            alert(err?.message || "Error al procesar la actualización.");
+            showResult("error", err?.message || "Error al procesar la actualización.", "Ocurrió un problema");
         } finally {
             setLoading(false);
         }
@@ -237,299 +250,309 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-xl overflow-hidden flex flex-col">
-                {/* Header */}
-                <div className="px-7 py-5 border-b border-slate-200 bg-brand-cream flex items-center justify-between">
-                    <div>
-                        <h3 className="text-lg font-bold text-slate-900">
-                            Editar Usuario
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-1">
-                            {userType === "admin" ? "Administrador" : userType === "terapeuta" ? "Terapeuta" : "Usuario"}
-                        </p>
+        <>
+            <ActionResultModal
+                open={resultOpen}
+                kind={resultKind}
+                title={resultTitle}
+                message={resultMessage}
+                onClose={() => setResultOpen(false)}
+            />
+
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-xl overflow-hidden flex flex-col">
+                    {/* Header */}
+                    <div className="px-7 py-5 border-b border-slate-200 bg-brand-cream flex items-center justify-between">
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900">
+                                Editar Usuario
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-1">
+                                {userType === "admin" ? "Administrador" : userType === "terapeuta" ? "Terapeuta" : "Usuario"}
+                            </p>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                        <span className="material-symbols-outlined">close</span>
-                    </button>
-                </div>
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-7">
-                    {loading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                            <span className="ml-3 text-slate-500">Cargando datos...</span>
-                        </div>
-                    ) : !userType ? (
-                        <div className="text-center py-12">
-                            <span className="material-symbols-outlined text-4xl text-slate-300 mb-3">block</span>
-                            <p className="text-slate-500">Este tipo de usuario no es editable.</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-6">
-                            {/* Common fields - 2 columns */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                        Nombres
-                                    </label>
-                                    <input
-                                        value={nombre}
-                                        onChange={(e) => setNombre(e.target.value)}
-                                        type="text"
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                        Apellidos
-                                    </label>
-                                    <input
-                                        value={apellido}
-                                        onChange={(e) => setApellido(e.target.value)}
-                                        type="text"
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                    />
-                                </div>
+                    {/* Content */}
+                    <div className="flex-1 overflow-y-auto p-7">
+                        {loading ? (
+                            <div className="flex items-center justify-center py-12">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                                <span className="ml-3 text-slate-500">Cargando datos...</span>
                             </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                        Email
-                                    </label>
-                                    <input
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        type="email"
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                        Teléfono
-                                    </label>
-                                    <input
-                                        value={telefono}
-                                        onChange={(e) => setTelefono(e.target.value)}
-                                        type="text"
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                    />
-                                </div>
+                        ) : !userType ? (
+                            <div className="text-center py-12">
+                                <span className="material-symbols-outlined text-4xl text-slate-300 mb-3">block</span>
+                                <p className="text-slate-500">Este tipo de usuario no es editable.</p>
                             </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                        Fecha de nacimiento
-                                    </label>
-                                    <input
-                                        value={fechaNacimiento}
-                                        onChange={(e) => setFechaNacimiento(e.target.value)}
-                                        type="date"
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                    />
+                        ) : (
+                            <div className="space-y-6">
+                                {/* Common fields - 2 columns */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                            Nombres
+                                        </label>
+                                        <input
+                                            value={nombre}
+                                            onChange={(e) => setNombre(e.target.value)}
+                                            type="text"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                            Apellidos
+                                        </label>
+                                        <input
+                                            value={apellido}
+                                            onChange={(e) => setApellido(e.target.value)}
+                                            type="text"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
+                                        />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                        Sexo
-                                    </label>
-                                    <select
-                                        value={sexo}
-                                        onChange={(e) => setSexo(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm outline-none focus:bg-white focus:border-primary appearance-none cursor-pointer"
-                                    >
-                                        <option>Seleccionar sexo</option>
-                                        <option value="M">Masculino</option>
-                                        <option value="F">Femenino</option>
-                                    </select>
-                                </div>
-                            </div>
 
-                            {/* Admin-specific fields */}
-                            {userType === "admin" && (
-                                <div className="border-t border-dashed border-slate-200 pt-6">
-                                    <p className="text-xs font-bold text-primary uppercase tracking-widest mb-4 flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-base">security</span>
-                                        Privilegios
-                                    </p>
-                                    <div className="space-y-2">
-                                        {[
-                                            ["superAdmin", "Super Administrador"],
-                                            ["expedientes", "Gestión de Archivos"],
-                                            ["auditoria", "Gestión contable"],
-                                        ].map(([k, label]) => (
-                                            <label
-                                                key={k}
-                                                className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer"
-                                            >
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                            Email
+                                        </label>
+                                        <input
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            type="email"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                            Teléfono
+                                        </label>
+                                        <input
+                                            value={telefono}
+                                            onChange={(e) => setTelefono(e.target.value)}
+                                            type="text"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                            Fecha de nacimiento
+                                        </label>
+                                        <input
+                                            value={fechaNacimiento}
+                                            onChange={(e) => setFechaNacimiento(e.target.value)}
+                                            type="date"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                            Sexo
+                                        </label>
+                                        <select
+                                            value={sexo}
+                                            onChange={(e) => setSexo(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm outline-none focus:bg-white focus:border-primary appearance-none cursor-pointer"
+                                        >
+                                            <option>Seleccionar sexo</option>
+                                            <option value="M">Masculino</option>
+                                            <option value="F">Femenino</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Admin-specific fields */}
+                                {userType === "admin" && (
+                                    <div className="border-t border-dashed border-slate-200 pt-6">
+                                        <p className="text-xs font-bold text-primary uppercase tracking-widest mb-4 flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-base">security</span>
+                                            Privilegios
+                                        </p>
+                                        <div className="space-y-2">
+                                            {[
+                                                ["superAdmin", "Super Administrador"],
+                                                ["expedientes", "Gestión de Archivos"],
+                                                ["auditoria", "Gestión contable"],
+                                            ].map(([k, label]) => (
+                                                <label
+                                                    key={k}
+                                                    className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!privs[k]}
+                                                        onChange={toggle(k)}
+                                                        className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary"
+                                                    />
+                                                    <span className="text-sm text-slate-700 font-semibold">{label}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Terapeuta-specific fields */}
+                                {userType === "terapeuta" && (
+                                    <div className="border-t border-dashed border-slate-200 pt-6 space-y-4">
+                                        <p className="text-xs font-bold text-primary uppercase tracking-widest">
+                                            Datos Profesionales
+                                        </p>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                                    Título Profesional
+                                                </label>
+                                                <select
+                                                    value={tituloProfesional}
+                                                    onChange={(e) => setTituloProfesional(e.target.value)}
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer"
+                                                >
+                                                    <option value="">Seleccionar Título</option>
+                                                    {profesionesList.map((prof) => (
+                                                        <option key={prof} value={prof}>{prof}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                                    Especialidad Principal
+                                                </label>
+                                                <select
+                                                    value={especialidadPrinc}
+                                                    onChange={(e) => setEspecialidadPrinc(e.target.value)}
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer"
+                                                >
+                                                    <option value="">Seleccionar Especialidad</option>
+                                                    {especialidadesList.map((esp) => (
+                                                        <option key={esp} value={esp}>{esp}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                                Descripción Perfil
+                                            </label>
+                                            <textarea
+                                                value={descripcionPerfil}
+                                                onChange={(e) => setDescripcionPerfil(e.target.value)}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none min-h-[80px]"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                                Frase Personal
+                                            </label>
+                                            <input
+                                                value={frasePersonal}
+                                                onChange={(e) => setFrasePersonal(e.target.value)}
+                                                type="text"
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                                Link Video Youtube
+                                            </label>
+                                            <input
+                                                value={linkVideoYoutube}
+                                                onChange={(e) => setLinkVideoYoutube(e.target.value)}
+                                                type="text"
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                                    Matrícula Profesional
+                                                </label>
                                                 <input
-                                                    type="checkbox"
-                                                    checked={!!privs[k]}
-                                                    onChange={toggle(k)}
-                                                    className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary"
+                                                    value={matriculaProfesional}
+                                                    onChange={(e) => setMatriculaProfesional(e.target.value)}
+                                                    type="text"
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
                                                 />
-                                                <span className="text-sm text-slate-700 font-semibold">{label}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Terapeuta-specific fields */}
-                            {userType === "terapeuta" && (
-                                <div className="border-t border-dashed border-slate-200 pt-6 space-y-4">
-                                    <p className="text-xs font-bold text-primary uppercase tracking-widest">
-                                        Datos Profesionales
-                                    </p>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                                Título Profesional
-                                            </label>
-                                            <select
-                                                value={tituloProfesional}
-                                                onChange={(e) => setTituloProfesional(e.target.value)}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer"
-                                            >
-                                                <option value="">Seleccionar Título</option>
-                                                {profesionesList.map((prof) => (
-                                                    <option key={prof} value={prof}>{prof}</option>
-                                                ))}
-                                            </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                                    Valor Sesión Base
+                                                </label>
+                                                <input
+                                                    value={valorSesionBase}
+                                                    onChange={(e) => setValorSesionBase(e.target.value)}
+                                                    type="number"
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
+                                                />
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                                Especialidad Principal
-                                            </label>
-                                            <select
-                                                value={especialidadPrinc}
-                                                onChange={(e) => setEspecialidadPrinc(e.target.value)}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer"
-                                            >
-                                                <option value="">Seleccionar Especialidad</option>
-                                                {especialidadesList.map((esp) => (
-                                                    <option key={esp} value={esp}>{esp}</option>
-                                                ))}
-                                            </select>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                                    País
+                                                </label>
+                                                <input
+                                                    value={pais}
+                                                    onChange={(e) => setPais(e.target.value)}
+                                                    type="text"
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                                                    Ciudad
+                                                </label>
+                                                <input
+                                                    value={ciudad}
+                                                    onChange={(e) => setCiudad(e.target.value)}
+                                                    type="text"
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
 
-                                    <div>
-                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                            Descripción Perfil
-                                        </label>
-                                        <textarea
-                                            value={descripcionPerfil}
-                                            onChange={(e) => setDescripcionPerfil(e.target.value)}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none min-h-[80px]"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                            Frase Personal
-                                        </label>
-                                        <input
-                                            value={frasePersonal}
-                                            onChange={(e) => setFrasePersonal(e.target.value)}
-                                            type="text"
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                            Link Video Youtube
-                                        </label>
-                                        <input
-                                            value={linkVideoYoutube}
-                                            onChange={(e) => setLinkVideoYoutube(e.target.value)}
-                                            type="text"
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                                Matrícula Profesional
-                                            </label>
-                                            <input
-                                                value={matriculaProfesional}
-                                                onChange={(e) => setMatriculaProfesional(e.target.value)}
-                                                type="text"
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                                Valor Sesión Base
-                                            </label>
-                                            <input
-                                                value={valorSesionBase}
-                                                onChange={(e) => setValorSesionBase(e.target.value)}
-                                                type="number"
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                                País
-                                            </label>
-                                            <input
-                                                value={pais}
-                                                onChange={(e) => setPais(e.target.value)}
-                                                type="text"
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                                                Ciudad
-                                            </label>
-                                            <input
-                                                value={ciudad}
-                                                onChange={(e) => setCiudad(e.target.value)}
-                                                type="text"
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                    {/* Footer */}
+                    {!loading && userType && (
+                        <div className="px-7 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-slate-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSubmit}
+                                className="px-5 py-2.5 bg-primary text-white text-xs font-bold uppercase tracking-widest rounded-xl shadow-lg shadow-primary/20 hover:bg-black transition-all"
+                            >
+                                Guardar Cambios
+                            </button>
                         </div>
                     )}
                 </div>
-
-                {/* Footer */}
-                {!loading && userType && (
-                    <div className="px-7 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-slate-50"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleSubmit}
-                            className="px-5 py-2.5 bg-primary text-white text-xs font-bold uppercase tracking-widest rounded-xl shadow-lg shadow-primary/20 hover:bg-black transition-all"
-                        >
-                            Guardar Cambios
-                        </button>
-                    </div>
-                )}
             </div>
-        </div>
+        </>
     );
 }

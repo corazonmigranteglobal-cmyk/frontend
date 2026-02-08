@@ -191,9 +191,11 @@ export function useBooking({ overridePacienteId = null } = {}) {
             fecha,
             horaInicio,
             horaFin,
+            inicioISO = "",
+            finISO = "",
             notas = "",
         }) => {
-            if (!idTerapeuta || !idProducto || !idEnfoque || !fecha || !horaInicio || !horaFin) {
+            if (!idTerapeuta || !idProducto || !idEnfoque || (!inicioISO && (!fecha || !horaInicio || !horaFin)) || (inicioISO && !finISO)) {
                 throw new Error("Faltan datos obligatorios para registrar la cita");
             }
 
@@ -202,9 +204,11 @@ export function useBooking({ overridePacienteId = null } = {}) {
             try {
                 const authParams = getAuthParams();
 
-                // Construir fechas en hora local y enviar con offset local (ej -04:00)
-                const inicioDate = buildLocalDate(fecha, horaInicio);
-                const finDate = buildLocalDate(fecha, horaFin);
+                // Si el UI ya seleccionó un slot con instantes ISO (recomendado),
+                // enviamos esos valores tal cual (timestamptz soporta "Z"/UTC).
+                // Si no, caemos al modo legacy: construir fechas en hora local y enviar con offset local.
+                const p_inicio = inicioISO ? String(inicioISO) : formatLocalTimestamptz(buildLocalDate(fecha, horaInicio));
+                const p_fin = finISO ? String(finISO) : formatLocalTimestamptz(buildLocalDate(fecha, horaFin));
 
                 const payload = {
                     args: {
@@ -214,9 +218,8 @@ export function useBooking({ overridePacienteId = null } = {}) {
                         p_id_producto: idProducto,
                         p_id_enfoque: idEnfoque,
                         p_fecha: fecha,
-                        // clave: NO enviar Z/UTC. Enviar timestamptz con offset local.
-                        p_inicio: formatLocalTimestamptz(inicioDate),
-                        p_fin: formatLocalTimestamptz(finDate),
+                        p_inicio,
+                        p_fin,
                         // tu API usa p_notas_internas (mantengo compatibilidad si el back lo mappea)
                         p_notas_internas: notas,
                     },

@@ -47,7 +47,7 @@ export default function LandingHome() {
         return;
 
       case "portal_admin":
-        console.log("portal_admin");
+
         return;
 
       case "open_booking_or_availability":
@@ -61,7 +61,7 @@ export default function LandingHome() {
     }
   }, []);
 
-  
+
   if (view === "login") {
     return <PublicLoginPage onBack={() => setView("landing")} />;
   }
@@ -75,7 +75,7 @@ export default function LandingHome() {
     );
   }
 
-if (loading && !content) {
+  if (loading && !content) {
     return (
       <div className="min-h-screen bg-background-light dark:bg-background-dark">
         <div className="h-16" />
@@ -128,7 +128,7 @@ if (loading && !content) {
     ],
     primary_cta: { label: "Agendar una cita", action: "scroll_to_contacto", href: "#contacto" },
     secondary_cta: { label: "Conocer emociones", action: "scroll_to_emociones", href: "#emociones" },
-    img: { id_ui: null, alt: "Personas caminando" , fallback_src: "" },
+    img: { id_ui: null, alt: "Personas caminando", fallback_src: "" },
     img_footer_text: "“Cuando migras, no te vas solo: te llevas tu gente, tu idioma y tu historia.”",
   };
 
@@ -139,8 +139,7 @@ if (loading && !content) {
   const dev = import.meta.env.DEV;
 
   if (dev) {
-    console.log("landing content:", content);
-    console.log("landing loading:", loading, "error:", error);
+    // console logs removed
   }
 
   const hasSchema =
