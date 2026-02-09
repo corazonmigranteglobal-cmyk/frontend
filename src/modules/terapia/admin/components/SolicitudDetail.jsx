@@ -16,28 +16,68 @@ export default function SolicitudDetail({
     variant = "list", // "list" | "agenda"
 }) {
     const estadoNorm = normalizeEstado(selected?.estado);
-    const isPagado = Boolean(selected?.pagado || selected?.raw?.is_pagado || selected?.raw?.pagado);
+
+    // pagado es boolean (puede venir en distintas rutas)
+    const isPagado = Boolean(
+        selected?.raw?.is_pagado ??
+        selected?.is_pagado ??
+        selected?.pagado ??
+        selected?.raw?.pagado
+    );
 
     const isCancelado = estadoNorm === "CANCELADO";
     const isConfirmado = estadoNorm === "CONFIRMADO";
+    const isPendiente = estadoNorm === "PENDIENTE";
     const isRealizado = estadoNorm === "REALIZADO";
 
-    const disableConfirm = isCancelado || isConfirmado || isRealizado;
+    // Regla base: si está CANCELADO no puede ser nada
     const disableAll = isCancelado;
 
-    // Solo tiene sentido "Realizar" si está confirmado y aún no está realizado/cancelado
-    const canRealizar = isConfirmado || isPagado;
-    const disableRealizar = !canRealizar || isCancelado || isRealizado;
+    /**
+     * REGLAS (tal cual pediste)
+     * - CONFIRMADA: cancelar(rechazar), realizar, reprogramar
+     * - CANCELADA: nada
+     * - PENDIENTE: cancelar, confirmar, reprogramar, pagada
+     * - REALIZADA: solo pagada
+     * - PAGADA (is_pagado=true): reprogramar y confirmar, pero NO cancelar
+     *   (si además está CANCELADA, gana "nada")
+     */
 
-    // "Pagado" es independiente: se puede marcar si está CONFIRMADO o REALIZADO.
-    // No se permite si está cancelado o ya está pagado.
-    const canPagado = isConfirmado || isRealizado;
-    const disablePagado = !canPagado || isPagado || isCancelado;
+    // Rechazar/Cancelar
+    // permitido si PENDIENTE o CONFIRMADO, pero NO si PAGADO, NO si REALIZADO, NO si CANCELADO
+    const canReject = !disableAll && !isPagado && (isPendiente || isConfirmado);
+    const disableReject = !canReject;
 
-    const disableReject = disableAll;
-    const disableReprogram = disableAll;
+    // Reprogramar
+    // permitido si PENDIENTE o CONFIRMADO; si es REALIZADO solo si está PAGADO; si CANCELADO nunca
+    const canReprogram =
+        !disableAll &&
+        (isPendiente || isConfirmado || (isPagado && !isCancelado));
+    const disableReprogram = !canReprogram;
+
+    // Confirmar
+    // permitido si PENDIENTE; y si está PAGADO también se permite confirmar (pero no si ya está CONFIRMADO)
+    // NO si REALIZADO, NO si CANCELADO
+    const canConfirm =
+        !disableAll &&
+        !isConfirmado &&
+        !isRealizado &&
+        (isPendiente || isPagado);
+    const disableConfirm = !canConfirm;
+
+    // Pagado
+    // permitido si PENDIENTE o REALIZADO, pero NO si ya está PAGADO, NO si CANCELADO
+    // (en CONFIRMADO NO se permite marcar pagado según tu regla)
+    const canPagado = !disableAll && !isPagado && (isPendiente || isRealizado);
+    const disablePagado = !canPagado;
+
+    // Realizar
+    // SOLO si está CONFIRMADO (pagado NO habilita realizar)
+    const canRealizar = !disableAll && isConfirmado && !isRealizado;
+    const disableRealizar = !canRealizar;
 
     const isAgenda = variant === "agenda";
+
 
     return (
         <section
