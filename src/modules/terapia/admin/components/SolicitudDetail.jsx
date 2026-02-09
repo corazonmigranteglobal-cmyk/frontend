@@ -33,15 +33,6 @@ export default function SolicitudDetail({
     // Regla base: si está CANCELADO no puede ser nada
     const disableAll = isCancelado;
 
-    /**
-     * REGLAS (tal cual pediste)
-     * - CONFIRMADA: cancelar(rechazar), realizar, reprogramar
-     * - CANCELADA: nada
-     * - PENDIENTE: cancelar, confirmar, reprogramar, pagada
-     * - REALIZADA: solo pagada
-     * - PAGADA (is_pagado=true): reprogramar y confirmar, pero NO cancelar
-     *   (si además está CANCELADA, gana "nada")
-     */
 
     // Rechazar/Cancelar
     // permitido si PENDIENTE o CONFIRMADO, pero NO si PAGADO, NO si REALIZADO, NO si CANCELADO
@@ -77,7 +68,6 @@ export default function SolicitudDetail({
     const disableRealizar = !canRealizar;
 
     const isAgenda = variant === "agenda";
-
 
     return (
         <section
