@@ -66,7 +66,7 @@ export default function PacienteDashboard() {
         const raw = safeStr(import.meta.env.VITE_WHATSAPP_NUMBER || "");
         const cleaned = raw.replace(/[^\d]/g, "");
         // Fallback DEFINITIVO (tu número)
-        return cleaned || "59178457347";
+        return cleaned || "59177026706";
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

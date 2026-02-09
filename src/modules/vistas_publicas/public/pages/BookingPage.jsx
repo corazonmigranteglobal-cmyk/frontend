@@ -66,7 +66,7 @@ export function openWhatsAppInBlank(url) {
 }
 
 export function openPaymentWhatsApp({ userNumber, sessionNumber, qrUrl } = {}) {
-    const phoneNumber = import.meta.env.VITE_WHATSAPP_NUMBER;
+    const phoneNumber = import.meta.env.VITE_WHATSAPP_NUMBER || "59177026706";
 
     const lines = [
         `Hola ${EMOJI.WAVE}`,
