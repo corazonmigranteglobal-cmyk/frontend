@@ -64,6 +64,43 @@ function parseUbicacionToPaisCiudad(ubicacion) {
   return { pais: "", ciudad: raw };
 }
 
+function buildUpdatePayload(session, userType, profile) {
+  if (!session || !userType) return null;
+
+  const { pais, ciudad } = parseUbicacionToPaisCiudad(profile?.ubicacion);
+
+  return {
+    p_actor_user_id: session.user_id,
+    p_id_sesion: session.id_sesion,
+    p_user_id: session.user_id,
+
+    // comunes
+    p_nombre: safeStr(profile?.nombre),
+    p_apellido: safeStr(profile?.apellido),
+    p_email: safeStr(profile?.email),
+    p_telefono: safeStr(profile?.telefono),
+    p_sexo: safeStr(profile?.sexo),
+    p_fecha_nacimiento: safeStr(profile?.fecha_nacimiento),
+
+    // terapeuta (si aplica)
+    ...(userType === "terapeuta" ? { p_pais: pais, p_ciudad: ciudad } : {}),
+
+    // admin (si aplica)
+    ...(userType === "admin"
+      ? {
+        p_is_super_admin: !!profile?.is_super_admin,
+        p_can_manage_files: !!profile?.can_manage_files,
+        p_is_accounter: !!profile?.is_accounter,
+        p_id_usuario_terapeuta: profile?.id_usuario_terapeuta || null,
+      }
+      : {}),
+
+    // prefs
+    p_idioma: safeStr(profile?.idioma),
+    p_timezone: safeStr(profile?.timezone),
+  };
+}
+
 export function useMiPerfil(session) {
   const { type: userType, reason } = useMemo(() => resolveUserType(session), [session]);
 
@@ -182,6 +219,14 @@ export function useMiPerfil(session) {
 
         // admin extras (si aplica)
         id_usuario_terapeuta: safeStr(specificData?.id_usuario_terapeuta || specificData?.user_id_terapeuta || ""),
+        // (opcional) nombre del terapeuta asignado si backend lo incluye
+        terapeuta_nombre_completo: safeStr(
+          specificData?.terapeuta_nombre_completo ||
+            specificData?.nombre_terapeuta_completo ||
+            specificData?.terapeuta_nombre ||
+            specificData?.terapeuta_fullname ||
+            ""
+        ),
         is_super_admin: !!(specificData?.is_super_admin ?? userData?.is_super_admin),
         can_manage_files: !!(specificData?.can_manage_files ?? userData?.can_manage_files),
         is_accounter: !!(specificData?.is_accounter ?? userData?.is_accounter),
@@ -229,6 +274,8 @@ export function useMiPerfil(session) {
         let rows = [];
         if (res && Array.isArray(res.rows)) rows = res.rows;
         else if (Array.isArray(res.data)) rows = res.data;
+        else if (Array.isArray(res.items)) rows = res.items;
+        else if (Array.isArray(res.terapeutas)) rows = res.terapeutas;
         else if (Array.isArray(res)) rows = res;
 
         if (!mounted) return;
@@ -287,9 +334,14 @@ export function useMiPerfil(session) {
     setError(null);
 
     try {
+      // Armamos el payload de actualización UNA sola vez.
+      // ✅ Se usará tanto para el PATCH de datos como para el POST de foto (cuando aplique).
+      const updatePayload = buildUpdatePayload(session, userType, profile);
+
       // 0) Si hay avatar cambiado, lo subimos primero (y recién ahí queda persistido)
       if (pendingAvatarFile) {
-        await uploadAvatarNow(pendingAvatarFile);
+        // Importante: el backend recibirá también los datos editados (no solo el archivo)
+        await uploadAvatarNow(pendingAvatarFile, { nota: "upload foto perfil" }, updatePayload);
         // limpia estado de pendiente (el fetchPerfil o newUrl actualizará avatarUrl)
         try {
           if (pendingAvatarObjectUrl) URL.revokeObjectURL(pendingAvatarObjectUrl);
@@ -305,38 +357,7 @@ export function useMiPerfil(session) {
         ? USUARIOS_ENDPOINTS.UPDATE_USUARIOS_TERAPEUTA
         : USUARIOS_ENDPOINTS.UPDATE_USUARIOS_ADMIN;
 
-      const { pais, ciudad } = parseUbicacionToPaisCiudad(profile.ubicacion);
-
-      const payload = {
-        p_actor_user_id: session.user_id,
-        p_id_sesion: session.id_sesion,
-        p_user_id: session.user_id,
-
-        // comunes
-        p_nombre: safeStr(profile.nombre),
-        p_apellido: safeStr(profile.apellido),
-        p_email: safeStr(profile.email),
-        p_telefono: safeStr(profile.telefono),
-        p_sexo: safeStr(profile.sexo),
-        p_fecha_nacimiento: safeStr(profile.fecha_nacimiento),
-
-        // terapeuta (si aplica)
-        ...(userType === "terapeuta" ? { p_pais: pais, p_ciudad: ciudad } : {}),
-
-        // admin (si aplica)
-        ...(userType === "admin"
-          ? {
-            p_is_super_admin: !!profile.is_super_admin,
-            p_can_manage_files: !!profile.can_manage_files,
-            p_is_accounter: !!profile.is_accounter,
-            p_id_usuario_terapeuta: profile.id_usuario_terapeuta || null,
-          }
-          : {}),
-
-        // prefs (si tu backend no las usa, las ignora)
-        p_idioma: safeStr(profile.idioma),
-        p_timezone: safeStr(profile.timezone),
-      };
+      const payload = updatePayload;
 
       // Método: no tenemos otro ejemplo en front para update, así que mantenemos PATCH
       await createApiConn(endpoint, payload, "PATCH", session);
@@ -385,8 +406,14 @@ export function useMiPerfil(session) {
     return walk(obj);
   };
 
-  // Subir avatar AHORA (uso interno en "save").
-  const uploadAvatarNow = async (file, metadata = { nota: "upload foto perfil" }) => {
+  // Subir avatar AHORA.
+  // ✅ Ahora también manda el payload de modificación (nombre, teléfono, etc.) junto al archivo,
+  // para que el backend no reciba solo la imagen.
+  const uploadAvatarNow = async (
+    file,
+    metadata = { nota: "upload foto perfil" },
+    updatePayload = null
+  ) => {
     if (!session || !userType) return;
     if (!file) return;
 
@@ -402,12 +429,21 @@ export function useMiPerfil(session) {
     setError(null);
 
     try {
-      const args = {
+      const baseArgs = {
         p_actor_user_id: actorId,
         p_id_sesion: sesionId,
+        // en este endpoint el target va separado, pero mandamos también p_user_id por compatibilidad
         p_target_user_id: targetId,
+        p_user_id: targetId,
         p_rol: "PERFIL",
         p_metadata: metadata || {},
+      };
+
+      // Si viene el payload de edición, lo "inyectamos" en args.
+      // Nota: si el backend ignora campos extra, no pasa nada. Si los soporta, los aplicará.
+      const args = {
+        ...baseArgs,
+        ...(updatePayload && typeof updatePayload === "object" ? updatePayload : {}),
       };
 
       const fd = new FormData();

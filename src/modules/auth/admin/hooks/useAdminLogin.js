@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { createApiConn } from "../../../../helpers/api_conn_factory";
 import { USUARIOS_ENDPOINTS } from "../../../../config/USUARIOS_ENDPOINTS";
+import { computeAdminAccess } from "../../../../app/auth/adminAccess";
 
 export function useAdminLogin({ onLoginSuccess } = {}) {
   const [email, setEmail] = useState("");
@@ -125,6 +126,7 @@ export function useAdminLogin({ onLoginSuccess } = {}) {
           is_super_admin: data.is_super_admin,
           is_terapeuta: data.is_terapeuta,
           is_accounter: data.is_accounter,
+          can_manage_files: data.can_manage_files,
           access_token: data.access_token,
           token_type: data.token_type,
           expires_in: data.expires_in,
@@ -133,6 +135,9 @@ export function useAdminLogin({ onLoginSuccess } = {}) {
           remember,
           id_terapeuta: parseInt(data.id_terapeuta),
         };
+
+        // computed UI access for ADMIN portal
+        sessionPayload.admin_access = computeAdminAccess(sessionPayload);
 
         setTimeout(() => {
           onLoginSuccess?.(sessionPayload);

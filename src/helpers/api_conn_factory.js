@@ -13,7 +13,7 @@ export async function createApiConn(endpoint, payload = {}, method = "POST", ses
             `API endpoint indefinido o inválido. Recibido: ${String(endpoint)}`
         );
     }
-    console.log("[createApiConn] body OUT", JSON.stringify(payload));
+
 
     const normalized = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
     let url = `${API_URL}${normalized}`;
@@ -50,7 +50,7 @@ export async function createApiConn(endpoint, payload = {}, method = "POST", ses
         }
     }
 
-    console.log(url);
+
 
     try {
         const response = await fetch(url, options);
@@ -70,7 +70,7 @@ export async function createApiConn(endpoint, payload = {}, method = "POST", ses
             error.data = data;
             throw error;
         }
-        console.log("data", data);
+
 
         return data;
     } catch (error) {

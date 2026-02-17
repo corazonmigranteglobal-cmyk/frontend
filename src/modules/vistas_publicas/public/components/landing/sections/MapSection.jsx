@@ -7,7 +7,7 @@ function isPlainObject(v) {
   return v && typeof v === "object" && !Array.isArray(v);
 }
 
-export default function MapSection({ data, onAction }) {
+export default function MapSection({ data, uiById, onAction }) {
   if (!data) return null;
 
   const id = data?.id || "";
@@ -56,7 +56,7 @@ export default function MapSection({ data, onAction }) {
     return [];
   }, [data?.paragraphs?.conclusion_phrase]);
 
-  // ✅ testimonios como objeto (titulo -> { paragraph:[], image:{src,alt} })
+  // ✅ testimonios como objeto (titulo -> { paragraph:[], image:{id_ui,alt} })
   const testimonialItems = useMemo(() => {
     const raw = data?.paragraphs?.testimonios ?? data?.testimonios;
     if (!isPlainObject(raw)) return [];
@@ -74,10 +74,10 @@ export default function MapSection({ data, onAction }) {
         const body = bodyArr.map((x) => String(x ?? "").trim()).filter(Boolean);
 
         const img = v?.image || {};
-        const imgSrc = String(img?.src ?? "").trim();
+        const imgIdUi = img?.id_ui ?? img?.id ?? img?.ui_id;
         const imgAlt = String(img?.alt ?? "").trim();
 
-        return { title: tTitle, body, image: { src: imgSrc, alt: imgAlt } };
+        return { title: tTitle, body, image: { id_ui: imgIdUi, alt: imgAlt } };
       })
       .filter((x) => x.title && x.body.length);
   }, [data?.paragraphs?.testimonios, data?.testimonios]);
@@ -86,8 +86,17 @@ export default function MapSection({ data, onAction }) {
   const link = data?.link || {};
 
   const imgAlt = image?.alt || "";
+  const imgIdUi = image?.id_ui;
   const imgSrc = image?.src || "";
   const imgFallback = image?.fallback_src || "";
+
+  const resolveUiUrl = (id_ui) => {
+    const id = Number(id_ui);
+    if (!Number.isFinite(id)) return "";
+    return uiById?.[id]?.link || uiById?.[id]?.metadata?.url || "";
+  };
+
+  const resolvedMainSrc = resolveUiUrl(imgIdUi) || imgSrc;
 
   const mapTiltRef = useMouseTilt(5);
 
@@ -245,9 +254,9 @@ export default function MapSection({ data, onAction }) {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent opacity-40 group-hover:opacity-20 transition-opacity z-10" />
 
                 <img
-                  alt={imgAlt}
+                  alt={imgAlt || uiById?.[Number(imgIdUi)]?.metadata?.alt || ""}
                   className="w-full h-[360px] lg:h-[480px] object-cover transform transition-transform duration-700 group-hover:scale-105"
-                  src={imgSrc}
+                  src={resolvedMainSrc}
                   onError={(e) => {
                     if (imgFallback) e.currentTarget.src = imgFallback;
                   }}
@@ -335,7 +344,8 @@ export default function MapSection({ data, onAction }) {
                   {testimonialItems.map((t) => {
                     const isOpen = openTestKeys.has(t.title);
                     const img = t.image || {};
-                    const hasImg = Boolean(img?.src);
+                    const testImgUrl = resolveUiUrl(img?.id_ui);
+                    const hasImg = Boolean(testImgUrl);
 
                     return (
                       <div
@@ -387,8 +397,8 @@ export default function MapSection({ data, onAction }) {
                                 <div className="pt-1">
                                   <div className="relative overflow-hidden rounded-xl border border-primary/10 dark:border-white/10 bg-white/70 dark:bg-white/5">
                                     <img
-                                      src={img.src}
-                                      alt={img.alt || "Testimonio"}
+                                      src={testImgUrl}
+                                      alt={img.alt || uiById?.[Number(img?.id_ui)]?.metadata?.alt || "Testimonio"}
                                       className="w-full h-[280px] sm:h-[400px] object-cover"
                                       loading="lazy"
                                       decoding="async"

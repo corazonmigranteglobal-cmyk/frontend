@@ -419,6 +419,8 @@ export default function UsersForm({ initialTipo = "Administrador" }) {
                 let rows = [];
                 if (response && Array.isArray(response.rows)) rows = response.rows;
                 else if (response?.status === true && Array.isArray(response.data)) rows = response.data;
+                else if (Array.isArray(response?.items)) rows = response.items;
+                else if (Array.isArray(response?.terapeutas)) rows = response.terapeutas;
                 else if (Array.isArray(response)) rows = response;
 
                 if (!mounted) return;

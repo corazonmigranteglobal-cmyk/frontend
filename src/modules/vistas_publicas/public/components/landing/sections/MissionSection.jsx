@@ -3,7 +3,7 @@ import React, { useMemo } from "react";
 import { useMouseTilt } from "../../../hooks/useMouseParallax";
 import { renderStrong } from "../../../../../../helpers/renderStrong.jsx";
 
-export default function MissionSection({ data, onAction }) {
+export default function MissionSection({ data, uiById, onAction }) {
   if (!data) return null;
 
   const id = data?.id || "";
@@ -13,12 +13,21 @@ export default function MissionSection({ data, onAction }) {
   const features = Array.isArray(data?.feature_cards) ? data.feature_cards : [];
   const link = data?.link || {};
   const image = data?.image || {};
-  console.log("data received on mission section: ", data)
+
 
   const imgAlt = image?.alt || "";
+  const imgIdUi = image?.id_ui;
   const imgSrc = image?.src || "";
   const imgFallback = image?.fallback_src || "";
-  console.log("Img scr: ", imgSrc);
+
+  const resolveUiUrl = (id_ui) => {
+    const idNum = Number(id_ui);
+    if (!Number.isFinite(idNum)) return "";
+    return uiById?.[idNum]?.link || uiById?.[idNum]?.metadata?.url || "";
+  };
+
+  const resolvedImgSrc = resolveUiUrl(imgIdUi) || imgSrc;
+
 
   // 3D tilt effect on image
   const imageTiltRef = useMouseTilt(6);
@@ -74,11 +83,11 @@ export default function MissionSection({ data, onAction }) {
             >
               <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent opacity-40 group-hover:opacity-20 transition-opacity z-10" />
 
-              {imgSrc ? (
+              {resolvedImgSrc ? (
                 <img
-                  alt={imgAlt}
+                  alt={imgAlt || uiById?.[Number(imgIdUi)]?.metadata?.alt || ""}
                   className="w-full h-[460px] lg:h-[640px] object-cover transform transition-transform duration-700 group-hover:scale-105"
-                  src={imgSrc}
+                  src={resolvedImgSrc}
                   onError={(e) => {
                     if (imgFallback) e.currentTarget.src = imgFallback;
                   }}

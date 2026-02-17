@@ -17,10 +17,7 @@ export default function EditEnfoqueModal({ isOpen, onClose, enfoque }) {
 
     const handleSave = () => {
         // NOTE: todavía no conectamos modificar (solo UI). Queda listo para enlazar.
-        console.log("[Enfoques] editar (pendiente endpoint)", {
-            id_enfoque: enfoque?.id,
-            ...form,
-        });
+        // NOTE: todavía no conectamos modificar (solo UI). Queda listo para enlazar.
         onClose?.();
     };
 

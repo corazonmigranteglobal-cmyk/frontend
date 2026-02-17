@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import EditUserModal from "./EditUserModal";
+import { USUARIOS_ENDPOINTS } from "../../../../config/USUARIOS_ENDPOINTS";
+import { createApiConn } from "../../../../helpers/api_conn_factory";
 
 export default function UsersTable({
     query,
@@ -9,6 +11,8 @@ export default function UsersTable({
     users = [],
     totalActive,
     session,
+    onRefresh,
+    onResult,
 }) {
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
@@ -16,6 +20,7 @@ export default function UsersTable({
     // Deactivation modal state
     const [deactivateModalOpen, setDeactivateModalOpen] = useState(false);
     const [userToDeactivate, setUserToDeactivate] = useState(null);
+    const [updatingEstado, setUpdatingEstado] = useState(false);
 
     // Pagination state
     const [page, setPage] = useState(1);
@@ -31,12 +36,79 @@ export default function UsersTable({
         setDeactivateModalOpen(true);
     };
 
+    const buildEstadoUrl = (userId) => {
+        const tpl = USUARIOS_ENDPOINTS.USUARIOS_ACTUALIZAR_ESTADO;
+        // tpl viene como "/api/usuarios/super_usuarios/:/estado"
+        if (tpl.includes(":/")) return tpl.replace(":/", `${userId}/`);
+        return tpl.replace(":user_id", String(userId)).replace(":id", String(userId)).replace(":", String(userId));
+    };
+
+    const updateEstadoUsuario = async ({ userId, activo }) => {
+        if (!session?.user_id || !session?.id_sesion) {
+            onResult?.("error", "Sesión inválida. Vuelve a iniciar sesión.", "Error");
+            return { ok: false };
+        }
+
+        const url = buildEstadoUrl(userId);
+        const payload = {
+            p_actor_user_id: session.user_id,
+            p_id_sesion: session.id_sesion,
+            p_target_user_id: userId,
+            p_activo: !!activo,
+        };
+
+        return await createApiConn(url, payload, "POST");
+    };
+
     const confirmDeactivate = async () => {
-        // TODO: Call USUARIOS_ACTUALIZAR_ESTADO endpoint here
-        console.log("Desactivando usuario:", userToDeactivate);
-        alert("Pendiente: conectar con endpoint USUARIOS_ACTUALIZAR_ESTADO");
-        setDeactivateModalOpen(false);
-        setUserToDeactivate(null);
+        if (!userToDeactivate?.id) return;
+        setUpdatingEstado(true);
+        try {
+            const res = await updateEstadoUsuario({ userId: userToDeactivate.id, activo: false });
+            const ok = res?.ok !== false && (res?.status === "ok" || res?.rows || res?.message);
+
+            if (ok) {
+                onResult?.("success", "Usuario desactivado correctamente.", "Éxito");
+                await onRefresh?.();
+                setDeactivateModalOpen(false);
+                setUserToDeactivate(null);
+            } else {
+                onResult?.(
+                    "error",
+                    res?.message || res?.rows?.[0]?.message || "No se pudo desactivar el usuario.",
+                    "Error"
+                );
+            }
+        } catch (e) {
+            console.error(e);
+            onResult?.("error", "Error de red o servidor al desactivar el usuario.", "Error");
+        } finally {
+            setUpdatingEstado(false);
+        }
+    };
+
+    const handleActivar = async (user) => {
+        if (!user?.id) return;
+        setUpdatingEstado(true);
+        try {
+            const res = await updateEstadoUsuario({ userId: user.id, activo: true });
+            const ok = res?.ok !== false && (res?.status === "ok" || res?.rows || res?.message);
+            if (ok) {
+                onResult?.("success", "Usuario activado correctamente.", "Éxito");
+                await onRefresh?.();
+            } else {
+                onResult?.(
+                    "error",
+                    res?.message || res?.rows?.[0]?.message || "No se pudo activar el usuario.",
+                    "Error"
+                );
+            }
+        } catch (e) {
+            console.error(e);
+            onResult?.("error", "Error de red o servidor al activar el usuario.", "Error");
+        } finally {
+            setUpdatingEstado(false);
+        }
     };
 
     // Helper to check if user is editable (not PACIENTE/USUARIO)
@@ -139,8 +211,9 @@ export default function UsersTable({
                                     type="button"
                                     onClick={confirmDeactivate}
                                     className="px-5 py-2.5 bg-red-600 text-white text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-red-700 transition-all"
+                                    disabled={updatingEstado}
                                 >
-                                    Sí, Desactivar
+                                    {updatingEstado ? "Procesando..." : "Sí, Desactivar"}
                                 </button>
                             </div>
                         </div>
@@ -220,7 +293,7 @@ export default function UsersTable({
 
                         <tbody className="divide-y divide-slate-100">
                             {pagedUsers.map((u) => {
-                                const inactive = u.status === "Inactivo";
+                                const inactive = (u.status || "").toLowerCase() !== "activo";
                                 return (
                                     <tr
                                         key={u.id}
@@ -228,7 +301,25 @@ export default function UsersTable({
                                     >
                                         <td className="px-7 py-5">
                                             <div className={"flex items-center gap-4 " + (inactive ? "opacity-70" : "")}>
-                                                <div className="h-10 w-10 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-sm font-bold">
+                                                {u.avatarUrl ? (
+                                                    <img
+                                                        src={u.avatarUrl}
+                                                        alt={u.name || "Usuario"}
+                                                        className="h-10 w-10 rounded-full object-cover border border-slate-200 bg-white"
+                                                        loading="lazy"
+                                                        referrerPolicy="no-referrer"
+                                                        onError={(e) => {
+                                                            // fallback a iniciales si falla la imagen
+                                                            e.currentTarget.style.display = "none";
+                                                            const sib = e.currentTarget?.nextSibling;
+                                                            if (sib) sib.style.display = "flex";
+                                                        }}
+                                                    />
+                                                ) : null}
+                                                <div
+                                                    className="h-10 w-10 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-sm font-bold"
+                                                    style={{ display: u.avatarUrl ? "none" : "flex" }}
+                                                >
                                                     {u.initials}
                                                 </div>
                                                 <div>
@@ -268,7 +359,8 @@ export default function UsersTable({
                                                 <button
                                                     type="button"
                                                     className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
-                                                    onClick={() => alert("Pendiente: activar usuario")}
+                                                    onClick={() => handleActivar(u)}
+                                                    disabled={updatingEstado}
                                                 >
                                                     <span className="material-symbols-outlined text-sm align-middle mr-1">
                                                         check_circle

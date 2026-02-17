@@ -6,6 +6,7 @@ import EditProductoModal from "../components/EditProductoModal";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import SuccessModal from "../components/SuccessModal";
 import { useProductosAdmin } from "../hooks/useProductosAdmin";
+import ActionResultModal from "../../../../app/components/modals/ActionResultModal";
 
 export default function ProductosDashboard({ session, onLogout, activeTab, onNavigate }) {
     const { query, setQuery, filtered, selectedId, setSelectedId, draft, setDraft, isLoading, error, actions } = useProductosAdmin(session);
@@ -21,6 +22,19 @@ export default function ProductosDashboard({ session, onLogout, activeTab, onNav
     const [successOpen, setSuccessOpen] = useState(false);
     const [successTitle, setSuccessTitle] = useState("Cambios guardados");
     const [successMessage, setSuccessMessage] = useState("Los cambios fueron realizados correctamente.");
+
+    // Modal resultado (reemplazo de alert)
+    const [resultOpen, setResultOpen] = useState(false);
+    const [resultKind, setResultKind] = useState("info");
+    const [resultTitle, setResultTitle] = useState("");
+    const [resultMessage, setResultMessage] = useState("");
+
+    const showResult = (kind, message, title = "") => {
+        setResultKind(kind || "info");
+        setResultTitle(title || "");
+        setResultMessage(message || "");
+        setResultOpen(true);
+    };
 
     const extractOkMessage = (res) => {
         try {
@@ -58,7 +72,7 @@ export default function ProductosDashboard({ session, onLogout, activeTab, onNav
             }
         } catch (err) {
             console.error("[Productos] save error", err);
-            alert(err?.data?.message || err?.message || "No se pudo guardar el producto");
+            showResult("error", err?.data?.message || err?.message || "No se pudo guardar el producto", "Ocurrió un problema");
         } finally {
             setIsSaving(false);
         }
@@ -67,6 +81,14 @@ export default function ProductosDashboard({ session, onLogout, activeTab, onNav
     return (
         <div className="min-h-screen bg-background-light text-text-main-light antialiased">
             <HeaderAdmin session={session} onLogout={onLogout} activeTab={activeTab} onNavigate={onNavigate} />
+
+            <ActionResultModal
+                open={resultOpen}
+                kind={resultKind}
+                title={resultTitle}
+                message={resultMessage}
+                onClose={() => setResultOpen(false)}
+            />
 
             <EditProductoModal
                 isOpen={editOpen}
@@ -90,7 +112,7 @@ export default function ProductosDashboard({ session, onLogout, activeTab, onNav
                     setDeleting(null);
                 }}
                 onConfirm={() => {
-                    console.log("[Productos] eliminar (pendiente endpoint)", deleting);
+
                     setDeleteOpen(false);
                     setDeleting(null);
                 }}
@@ -188,7 +210,7 @@ export default function ProductosDashboard({ session, onLogout, activeTab, onNav
                                     setSuccessOpen(true);
                                 } catch (err) {
                                     console.error("[Productos] save error", err);
-                                    alert(err?.data?.message || err?.message || "No se pudo guardar el producto");
+                                    showResult("error", err?.data?.message || err?.message || "No se pudo guardar el producto", "Ocurrió un problema");
                                 } finally {
                                     setIsSaving(false);
                                 }

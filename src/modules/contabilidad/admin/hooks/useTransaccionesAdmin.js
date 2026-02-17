@@ -2,30 +2,51 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createApiConn } from "../../../../helpers/api_conn_factory";
 import { CONTABILIDAD_ENDPOINT } from "../../../../config/CONTABILIDAD_ENDPOINT";
 
-function assertDbOk(res) {
-    // El backend puede devolver HTTP 200 con ok=true pero status="error" en rows[0]
-    if (res?.ok === false) {
-        throw new Error(res?.message || "Operación fallida");
-    }
+function unwrapFnRow(res) {
     const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
-    if (r0?.status && String(r0.status).toLowerCase() !== "ok") {
-        const err = new Error(r0?.message || "Operación fallida");
-        err.data = res;
-        throw err;
+    if (!r0 || typeof r0 !== "object") return null;
+    const keys = Object.keys(r0);
+    if (keys.length !== 1) return null;
+    const v = r0[keys[0]];
+    return v && typeof v === "object" ? v : null;
+}
+
+function assertDbOk(res) {
+    if (res?.ok === false) throw new Error(res?.message || "Operación fallida");
+
+    const r0 = Array.isArray(res?.rows) ? res.rows[0] : null;
+    if (r0?.status) {
+        if (String(r0.status).toLowerCase() !== "ok") {
+            const err = new Error(r0?.message || "Operación fallida");
+            err.data = res;
+            throw err;
+        }
+        return res;
     }
+
+    const inner = unwrapFnRow(res);
+    if (inner) {
+        if (inner.ok === false) {
+            const err = new Error(inner?.message || "Operación fallida");
+            err.data = res;
+            throw err;
+        }
+        return res;
+    }
+
     return res;
 }
 
 function getActorPayload(session) {
     return {
-        p_actor_user_id: session?.user_id ?? session?.usuario_id ?? session?.id_user ?? session?.id_usuario,
+        p_actor_user_id:
+            session?.user_id ?? session?.usuario_id ?? session?.id_user ?? session?.id_usuario,
         p_id_sesion: session?.id_sesion,
     };
 }
 
 function toIsoDateInput(value) {
     if (!value) return "";
-    // value puede ser "2026-01-20T04:00:00.000Z" o "2026-01-20"
     const s = String(value);
     return s.includes("T") ? s.split("T")[0] : s;
 }
@@ -60,6 +81,7 @@ function writeCache(session, next) {
 function ensureCacheShape(session) {
     const key = getCacheKey(session);
     if (!key) return;
+
     if (!sessionStorage.getItem(key)) {
         writeCache(session, {
             cuentas: { byId: {} },
@@ -68,7 +90,6 @@ function ensureCacheShape(session) {
             transacciones: { byId: {} },
         });
     } else {
-        // asegurar que existan claves nuevas
         const cur = readCache(session) || {};
         const next = {
             cuentas: cur.cuentas || { byId: {} },
@@ -102,7 +123,6 @@ function overlayTransacciones(list, session) {
         out.push(byId[k] ? { ...t, ...byId[k] } : t);
         seen.add(k);
     }
-    // agregar transacciones que existen solo en cache
     for (const k of Object.keys(byId)) {
         if (!seen.has(k)) out.unshift(byId[k]);
     }
@@ -113,6 +133,10 @@ function mapTransaccionRow(r) {
     const movimientos = Array.isArray(r.movimientos) ? r.movimientos : [];
     const total_debe = movimientos.reduce((a, m) => a + (Number(m?.debe) || 0), 0);
     const total_haber = movimientos.reduce((a, m) => a + (Number(m?.haber) || 0), 0);
+
+    // ✅ IMPORTANTE: conservar "venta" porque tu API lo manda
+    const venta = r?.venta && typeof r.venta === "object" ? r.venta : null;
+
     return {
         id_transaccion: r.id_transaccion,
         fecha: toIsoDateInput(r.fecha),
@@ -132,6 +156,9 @@ function mapTransaccionRow(r) {
         })),
         total_debe,
         total_haber,
+
+        // ✅ NUEVO
+        venta,
     };
 }
 
@@ -159,7 +186,6 @@ export function useTransaccionesAdmin(session, { autoFetch = true, limit = 200 }
                 const payload = {
                     ...getActorPayload(session),
 
-                    // Paginación (compatibilidad)
                     p_limit: limit,
                     p_offset: offset,
                     limit,
@@ -204,6 +230,38 @@ export function useTransaccionesAdmin(session, { autoFetch = true, limit = 200 }
         [session]
     );
 
+    const registrarVenta = useCallback(
+        async ({ fecha, glosa, referencia_externa, metadata, movimientos, cantidad, id_producto, id_cita = null }) => {
+            const endpoint = CONTABILIDAD_ENDPOINT?.CONTABILIDAD_TRANSACCION_VENTA_CREAR;
+            if (!endpoint) throw new Error("Endpoint CONTABILIDAD_TRANSACCION_VENTA_CREAR no definido");
+            if (!session?.id_sesion) throw new Error("Sesión inválida (id_sesion faltante)");
+
+            const payload = {
+                ...getActorPayload(session),
+                p_fecha: fecha,
+                p_glosa: glosa,
+                p_referencia_externa: referencia_externa,
+                p_metadata: metadata || {},
+                p_movimientos: movimientos || [],
+                p_cantidad: Number(cantidad) || 0,
+                p_id_producto: Number(id_producto) || null,
+                ...(id_cita ? { p_id_cita: Number(id_cita) } : {}),
+            };
+
+            const res = assertDbOk(await createApiConn(endpoint, payload, "POST", session));
+
+            const inner = unwrapFnRow(res);
+            if (inner) {
+                if (inner.ok === false) throw new Error(inner?.message || "No se pudo registrar la transacción de venta");
+                return { ok: true, data: inner.data ?? null, raw: res };
+            }
+
+            if (res?.ok === false) throw new Error(res?.message || "No se pudo registrar la transacción de venta");
+            return { ok: true, data: res?.data ?? null, raw: res };
+        },
+        [session]
+    );
+
     useEffect(() => {
         if (!session?.id_sesion) return;
         ensureCacheShape(session);
@@ -223,9 +281,7 @@ export function useTransaccionesAdmin(session, { autoFetch = true, limit = 200 }
 
     const applyOptimisticCreatedTransaccion = useCallback(
         (transaccion) => {
-            // 1) cache
             cacheUpsertTransaccion(session, transaccion);
-            // 2) state (overlay inmediato)
             setTransacciones((prev) => overlayTransacciones(prev, session));
         },
         [session]
@@ -238,6 +294,7 @@ export function useTransaccionesAdmin(session, { autoFetch = true, limit = 200 }
         error,
         fetchTransacciones,
         registrarBatch,
+        registrarVenta,
         setTransacciones,
         setError,
         applyOptimisticCreatedTransaccion,

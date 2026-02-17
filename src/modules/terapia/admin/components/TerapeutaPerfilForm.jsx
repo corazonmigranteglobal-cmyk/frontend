@@ -266,7 +266,7 @@ export default function TerapeutaPerfilForm({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="md:col-span-2">
+            <div className="md:col-span-2" title="Este campo no es modificable">
               <FieldLabel>Email *</FieldLabel>
               <TextInput
                 icon="mail"
@@ -274,7 +274,7 @@ export default function TerapeutaPerfilForm({
                 placeholder="ejemplo@corazondemigrante.com"
                 value={profile?.email}
                 onChange={(v) => set("email", v)}
-                disabled={disabled}
+                disabled={true}
               />
             </div>
 

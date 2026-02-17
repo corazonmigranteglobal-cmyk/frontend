@@ -3,128 +3,31 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml"
-    href="https://storage.googleapis.com/vistas_publicas_assets/global_assets/media/LOGO%20CORAZON%20MIGRANTE.png" />
+
+  <!-- Favicons (recomendado: archivos locales en /public) -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Corazón Migrante</title>
+  <title>Corazón de Migrante</title>
+
+  <!-- Preconnect Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
   <!-- Icons -->
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
     rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
 
-  <!-- Fonts (opcional, no rompe nada) -->
+  <!-- Fonts -->
   <link
     href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap"
     rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap"
     rel="stylesheet" />
-
-  <!-- Tailwind CDN -->
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-
-
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@400;600;700&display=swap"
-    rel="stylesheet" />
-
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700&display=swap"
-    rel="stylesheet" />
-
-
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-
-
-  <script id="tailwind-config">
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            primary: "#742f38",
-            "brand-gold": "#D1A73A",
-            "brand-cream": "#F6F0E6",
-            "background-light": "#f7f6f6",
-            "background-dark": "#1d1516",
-            "cream-panel": "#fbf7f4",
-            "background-soft": "#f7f6f6",
-            "brand-cream": "#fbf7f4",
-            "primary-dark": "#4a1b21",
-            "primary-light": "#8a454d",
-            secondary: "#E8E2DE",
-            "surface-light": "#ffffff",
-            "border-light": "#e5e1df",
-            "text-main-light": "#2d2424",
-            "text-muted-light": "#7c6f6f",
-          },
-          fontFamily: {
-            display: ["Manrope", "Playfair Display", "sans-serif"],
-            body: ["Manrope", "Inter", "sans-serif"],
-          },
-          borderRadius: {
-            DEFAULT: "0.5rem",
-            lg: "0.75rem",
-            xl: "1.5rem",
-            full: "9999px",
-            "2xl": "1.25rem",
-          },
-          boxShadow: {
-            soft: "0 4px 20px -2px rgba(109, 46, 54, 0.08)",
-            "inner-soft": "inset 0 2px 4px 0 rgba(0, 0, 0, 0.03)",
-          },
-        },
-      },
-    };
-  </script>
-
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <script id="tailwind-config">
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            // lo que ya tenías
-            primary: "#742f38",
-            "background-light": "#f7f6f6",
-            "background-dark": "#1d1516",
-            "cream-panel": "#fbf7f4",
-
-            "background-soft": "#f7f6f6",
-            "brand-cream": "#fbf7f4",
-
-            "primary-dark": "#4a1b21",
-            "primary-light": "#8a454d",
-            secondary: "#E8E2DE",
-            "surface-light": "#ffffff",
-            "border-light": "#e5e1df",
-            "text-main-light": "#2d2424",
-            "text-muted-light": "#7c6f6f",
-          },
-          fontFamily: {
-            display: ["Manrope", "Playfair Display", "sans-serif"],
-            body: ["Manrope", "Inter", "sans-serif"],
-          },
-          borderRadius: {
-            DEFAULT: "0.5rem",
-            lg: "0.75rem",
-            xl: "1.5rem",
-            full: "9999px",
-            "2xl": "1.25rem",
-          },
-          boxShadow: {
-            soft: "0 4px 20px -2px rgba(109, 46, 54, 0.08)",
-            "inner-soft": "inset 0 2px 4px 0 rgba(0, 0, 0, 0.03)",
-          },
-        },
-      },
-    };
-  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet" />
 </head>
 
 <body class="bg-background-light text-text-main-light font-body antialiased dark:bg-background-dark dark:text-white">

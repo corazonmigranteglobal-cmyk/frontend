@@ -11,4 +11,6 @@ export const UI_ENDPOINTS = {
     UI_ELEMENTO_ELIMINAR: "api/publico/ui/elementos/apagar",
 
     UI_ELEMENTO_EDITAR_CON_ARCHIVO: "api/publico/ui/elementos/actualizar-con-archivo",
+    UI_PAGINA_PUBLICA_BUNDLE: "api/publico/ui/pagina-publica"
+
 };

@@ -57,7 +57,7 @@ export default function AdminLogin({ onLoginSuccess }) {
 
         try {
             const response = await createApiConn("/api/usuarios/login", { p_email: email, p_password: password }, "POST");
-            console.log("Respuesta del servidor:", response);
+
 
             if (response.rows && response.rows.length > 0) {
                 const result = response.rows[0];
@@ -72,7 +72,7 @@ export default function AdminLogin({ onLoginSuccess }) {
                         setErrorMessage(result.message);
                     }
                 } else if (result.status === "ok") {
-                    console.log("Login exitoso");
+
                     const allowed =
                         result.data.is_terapeuta === true ||
                         result.data.is_admin === true ||
@@ -203,7 +203,7 @@ export default function AdminLogin({ onLoginSuccess }) {
             const row = resp?.rows?.[0];
 
             if (row?.status === "ok") {
-                console.log(row);
+
                 closeForgotModal();
                 return;
             }

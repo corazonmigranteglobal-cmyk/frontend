@@ -1,7 +1,6 @@
 export function exportUsersCsv(users) {
     if (!Array.isArray(users) || users.length === 0) {
-        alert("No hay usuarios para exportar");
-        return;
+        return { ok: false, message: "No hay usuarios para exportar" };
     }
 
     const headers = ["ID", "Email", "Rol", "Estado"];
@@ -20,4 +19,6 @@ export function exportUsersCsv(users) {
     link.download = `usuarios_${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+
+    return { ok: true };
 }

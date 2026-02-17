@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import HeaderAdmin from "../components/HeaderAdmin";
 import SolicitudesList from "../components/SolicitudesList";
@@ -7,8 +8,10 @@ import SolicitudDetail from "../components/SolicitudDetail";
 
 import RejectModal from "../components/modals/RejectModal";
 import ConfirmModal from "../components/modals/ConfirmModal";
+import PagadoModal from "../components/modals/PagadoModal";
 import ReprogramarModal from "../components/modals/ReprogramarModal";
 import SuccessModal from "../components/modals/SuccessModal";
+import RealizarModal from "../components/modals/RealizarModal";
 
 import { useSolicitudes } from "../hooks/useSolicitudes";
 import { useCitaActions } from "../hooks/useCitaActions";
@@ -16,6 +19,7 @@ import { useCitaActions } from "../hooks/useCitaActions";
 export default function RequestDashboard({ session, onLogout, activeTab, onNavigate }) {
     const [guideStep, setGuideStep] = useState(0);
     const [viewMode, setViewMode] = useState("list"); // "list" | "agenda"
+    const navigate = useNavigate();
 
     const {
         query,
@@ -85,7 +89,7 @@ export default function RequestDashboard({ session, onLogout, activeTab, onNavig
                                     Agenda
                                 </button>
                             </div>
-                            <button className="flex items-center gap-2 px-5 py-3 bg-primary text-white text-xs font-bold uppercase tracking-widest rounded-xl shadow-lg shadow-primary/20 hover:bg-black transition-all">
+                            <button onClick={() => navigate("nueva-cita")} className="flex items-center gap-2 px-5 py-3 bg-primary text-white text-xs font-bold uppercase tracking-widest rounded-xl shadow-lg shadow-primary/20 hover:bg-black transition-all">
                                 <span className="material-symbols-outlined text-sm">add_circle</span> Nueva Cita
                             </button>
                         </div>
@@ -113,6 +117,7 @@ export default function RequestDashboard({ session, onLogout, activeTab, onNavig
                     )}
 
                     <SolicitudDetail
+                        variant={viewMode}
                         selected={selected}
                         className={viewMode === "agenda" ? "col-span-12 lg:col-span-4" : "col-span-12 lg:col-span-8"}
                         guideStep={guideStep}
@@ -127,6 +132,14 @@ export default function RequestDashboard({ session, onLogout, activeTab, onNavig
                         onOpenConfirm={() => {
                             actions.setSuccessOpen(false);
                             actions.setConfirmOpen(true);
+                        }}
+                        onOpenPagado={() => {
+                            actions.setSuccessOpen(false);
+                            actions.setPagadoOpen(true);
+                        }}
+                        onOpenRealizar={() => {
+                            actions.setSuccessOpen(false);
+                            actions.setRealizarOpen(true);
                         }}
                     />
                 </div>
@@ -156,6 +169,24 @@ export default function RequestDashboard({ session, onLogout, activeTab, onNavig
                 error={actions.confirmError}
                 loading={actions.confirmLoading}
                 onSubmit={actions.handleConfirmSubmit}
+            />
+
+            <PagadoModal
+                open={actions.pagadoOpen}
+                onClose={() => actions.setPagadoOpen(false)}
+                selected={selected}
+                error={actions.pagadoError}
+                loading={actions.pagadoLoading}
+                onSubmit={actions.handlePagadoSubmit}
+            />
+
+            <RealizarModal
+                open={actions.realizarOpen}
+                onClose={() => actions.setRealizarOpen(false)}
+                selected={selected}
+                error={actions.realizarError}
+                loading={actions.realizarLoading}
+                onSubmit={actions.handleRealizarSubmit}
             />
 
             <ReprogramarModal

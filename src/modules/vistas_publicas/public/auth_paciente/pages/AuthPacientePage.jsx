@@ -6,6 +6,7 @@ import ConfirmActionModal from "../components/modals/ConfirmActionModal";
 import ActionResultModal from "../components/modals/ActionResultModal";
 import { createPortal } from "react-dom";
 import { ROUTES_FILE_SERVER } from "../../../../../config/ROUTES_FILE_SERVER";
+import { useDynamicLogo } from "../../../../../hooks/useDynamicLogo";
 
 /* =========================
    Small helpers
@@ -593,6 +594,8 @@ function AuthBenefits() {
 ========================= */
 function LeftAuthPanel({ isRegister }) {
   const [imgOk, setImgOk] = useState(true);
+  const [logoOk, setLogoOk] = useState(true);
+  const { logoUrl } = useDynamicLogo({ idElemento: 1 });
 
   const headline = isRegister
     ? "Un nuevo comienzo\naún es posible."
@@ -635,9 +638,21 @@ function LeftAuthPanel({ isRegister }) {
           {/* Top brand pill */}
           <div className="flex items-center justify-between">
             <div className="inline-flex items-center gap-2 rounded-2xl px-4 py-2 bg-white/10 border border-white/15 backdrop-blur mt-8 align-center">
-              <span className="material-symbols-outlined text-white text-[22px]">
-                favorite
-              </span>
+              {logoOk && logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt="Logo Corazón Migrante"
+                  className="w-6 h-6 object-contain"
+                  style={{ borderRadius: "35%" }}
+                  onError={() => setLogoOk(false)}
+                  loading="eager"
+                  decoding="async"
+                />
+              ) : (
+                <span className="material-symbols-outlined text-white text-[22px]">
+                  favorite
+                </span>
+              )}
               <span className="text-white/95 font-semibold tracking-tight">
                 Corazón de Migrante
               </span>
@@ -914,9 +929,48 @@ export default function AuthPacientePage({ onBack, onGoLogin, initialMode } = {}
                         />
                       </div>
 
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div className="space-y-1">
+                          <label
+                            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                            htmlFor="sexo"
+                          >
+                            Sexo
+                          </label>
+                          <Select
+                            id="sexo"
+                            value={registerForm.sexo}
+                            onChange={(v) => setRegisterField("sexo", v)}
+                            disabled={loading}
+                          >
+                            <option value="" disabled>
+                              Seleccionar
+                            </option>
+                            <option value="F">F</option>
+                            <option value="M">M</option>
+                            <option value="O">O</option>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label
+                            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                            htmlFor="dob"
+                          >
+                            Fecha de Nacimiento
+                          </label>
+                          <Input
+                            id="dob"
+                            type="date"
+                            value={registerForm.fecha_nacimiento}
+                            onChange={(v) => setRegisterField("fecha_nacimiento", v)}
+                          />
+                        </div>
+                      </div>
+
                       <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white/40 dark:bg-white/5 p-4 space-y-4 mt-4 backdrop-blur">
                         <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                          Expectativas terapia
+                          Cuentanos un poco de ti ... (Recuerda que esta informacion es opcional)
                         </p>
 
                         <Input
@@ -951,45 +1005,6 @@ export default function AuthPacientePage({ onBack, onGoLogin, initialMode } = {}
                           disabled={loading}
                           value={registerForm.objetivos}
                           onChange={(v) => setRegisterField("objetivos", v)}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div className="space-y-1">
-                        <label
-                          className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                          htmlFor="sexo"
-                        >
-                          Sexo
-                        </label>
-                        <Select
-                          id="sexo"
-                          value={registerForm.sexo}
-                          onChange={(v) => setRegisterField("sexo", v)}
-                          disabled={loading}
-                        >
-                          <option value="" disabled>
-                            Seleccionar
-                          </option>
-                          <option value="F">F</option>
-                          <option value="M">M</option>
-                          <option value="O">O</option>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label
-                          className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                          htmlFor="dob"
-                        >
-                          Fecha de Nacimiento
-                        </label>
-                        <Input
-                          id="dob"
-                          type="date"
-                          value={registerForm.fecha_nacimiento}
-                          onChange={(v) => setRegisterField("fecha_nacimiento", v)}
                         />
                       </div>
                     </div>

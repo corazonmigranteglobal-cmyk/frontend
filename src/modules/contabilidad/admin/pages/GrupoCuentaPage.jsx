@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ConfirmDeleteModal from "../components/modals/ConfirmDeleteModal";
+import ActionResultModal from "../components/modals/ActionResultModal";
 import MetadataKeyValueTable from "../components/MetadataKeyValueTable";
 import { useGruposCuentaAdmin } from "../hooks/useGruposCuentaAdmin";
 import PaginationControls from "../components/PaginationControls";
@@ -18,15 +19,8 @@ export default function GrupoCuentaPage({ session }) {
   const [pageSize, setPageSize] = useState(50);
   const [offset, setOffset] = useState(0);
 
-  const {
-    rows,
-    isLoading,
-    error,
-    fetchGrupos,
-    crearGrupoCuenta,
-    editarGrupoCuenta,
-    apagarGrupoCuenta,
-  } = useGruposCuentaAdmin(session, { autoFetch: false, limit: pageSize });
+  const { rows, isLoading, error, fetchGrupos, crearGrupoCuenta, editarGrupoCuenta, apagarGrupoCuenta } =
+    useGruposCuentaAdmin(session, { autoFetch: false, limit: pageSize });
 
   useEffect(() => {
     if (!session?.id_sesion) return;
@@ -36,21 +30,36 @@ export default function GrupoCuentaPage({ session }) {
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
-  // Evita sobre-escribir metadata con {} cuando el listar no la trae.
+
   const [metadataTouched, setMetadataTouched] = useState(false);
+  const [parentTouched, setParentTouched] = useState(false);
+
   const [saving, setSaving] = useState(false);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [resultOpen, setResultOpen] = useState(false);
+  const [resultKind, setResultKind] = useState("success");
+  const [resultTitle, setResultTitle] = useState("");
+  const [resultMessage, setResultMessage] = useState("");
+
+  const showResult = (kind, title, message) => {
+    setResultKind(kind || "success");
+    setResultTitle(title || "");
+    setResultMessage(message || "");
+    setResultOpen(true);
+  };
+
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
-    return rows.filter((r) =>
-      String(r.codigo || "").toLowerCase().includes(q) ||
-      String(r.nombre || "").toLowerCase().includes(q) ||
-      String(r.grupo_padre_nombre || "").toLowerCase().includes(q)
+    return rows.filter(
+      (r) =>
+        String(r.codigo || "").toLowerCase().includes(q) ||
+        String(r.nombre || "").toLowerCase().includes(q) ||
+        String(r.grupo_padre_nombre || "").toLowerCase().includes(q)
     );
   }, [rows, query]);
 
@@ -61,8 +70,9 @@ export default function GrupoCuentaPage({ session }) {
   }, [rows]);
 
   const padreOptions = useMemo(() => {
-    // para no permitir seleccionarse a sí mismo
+    // ✅ solo padres Activos + no permitir seleccionarse a sí mismo
     return rows
+      .filter((r) => (r.register_status ?? "Activo") === "Activo")
       .filter((r) => !form.id_grupo_cuenta || r.id_grupo_cuenta !== form.id_grupo_cuenta)
       .map((r) => ({ id: r.id_grupo_cuenta, label: `${r.codigo} - ${r.nombre}` }));
   }, [rows, form.id_grupo_cuenta]);
@@ -71,17 +81,19 @@ export default function GrupoCuentaPage({ session }) {
     setActiveId(null);
     setForm(EMPTY_FORM);
     setMetadataTouched(false);
+    setParentTouched(false);
   };
 
   const startEdit = (row) => {
     setActiveId(row.id_grupo_cuenta);
     setMetadataTouched(false);
+    setParentTouched(false);
     setForm({
       id_grupo_cuenta: row.id_grupo_cuenta,
       codigo: row.codigo ?? "",
       nombre: row.nombre ?? "",
       tipo_grupo: row.tipo_grupo ?? "",
-      id_grupo_padre: row.id_grupo_padre ?? "",
+      id_grupo_padre: row.id_grupo_padre ? String(row.id_grupo_padre) : "",
       metadata: row.metadata ?? {},
       register_status: row.register_status ?? "Activo",
     });
@@ -89,40 +101,49 @@ export default function GrupoCuentaPage({ session }) {
 
   const onSave = async () => {
     if (!session?.id_sesion) {
-      alert("Sesión inválida: falta id_sesion");
+      showResult("error", "Sesión inválida", "Falta id_sesion. Vuelve a iniciar sesión.");
       return;
     }
     if (!form.nombre) {
-      alert("El Nombre es obligatorio");
+      showResult("error", "Campos obligatorios", "El Nombre es obligatorio.");
       return;
     }
 
     setSaving(true);
     try {
+      // raíz => null, id => number
+      const rawPadre = form.id_grupo_padre;
+      const padreNum = rawPadre === "" || rawPadre == null ? null : Number(rawPadre);
+      const padreId = !padreNum || Number.isNaN(padreNum) ? null : padreNum;
+
       const payload = {
         id_grupo_cuenta: form.id_grupo_cuenta,
         codigo: form.codigo,
         nombre: form.nombre,
         tipo_grupo: form.tipo_grupo,
-        id_grupo_padre: form.id_grupo_padre === "" ? null : Number(form.id_grupo_padre),
         register_status: form.register_status,
-        metadata: form.id_grupo_cuenta
-          ? (metadataTouched ? (form.metadata ?? {}) : undefined)
-          : (form.metadata ?? {}),
+        metadata: form.id_grupo_cuenta ? (metadataTouched ? form.metadata ?? {} : undefined) : form.metadata ?? {},
       };
 
-      if (form.id_grupo_cuenta) {
-        await editarGrupoCuenta(payload);
-      } else {
-        await crearGrupoCuenta(payload);
+      // ✅ solo mandar padre si:
+      // - creando (siempre)
+      // - editando y el usuario lo tocó
+      if (!form.id_grupo_cuenta) {
+        payload.id_grupo_padre = padreId;
+      } else if (parentTouched) {
+        payload.id_grupo_padre = padreId;
       }
+
+      if (form.id_grupo_cuenta) await editarGrupoCuenta(payload);
+      else await crearGrupoCuenta(payload);
 
       setOffset(0);
       await fetchGrupos({ offset: 0 });
       startCreate();
+      showResult("success", "Listo", "Grupo guardado correctamente.");
     } catch (e) {
       console.error(e);
-      alert(e?.message || "Error al guardar");
+      showResult("error", "Error al guardar", e?.message || "No se pudo guardar el grupo.");
     } finally {
       setSaving(false);
     }
@@ -143,18 +164,23 @@ export default function GrupoCuentaPage({ session }) {
       if (activeId === deleteTarget.id_grupo_cuenta) startCreate();
       setDeleteOpen(false);
       setDeleteTarget(null);
+      showResult("success", "Listo", "Grupo eliminado correctamente.");
     } catch (e) {
       console.error(e);
-      alert(e?.message || "Error al eliminar");
+      showResult("error", "Error al eliminar", e?.message || "No se pudo eliminar el grupo.");
     } finally {
       setDeleting(false);
     }
   };
 
   const statusBadge = (form.register_status || "Activo") === "Activo" ? (
-    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Activo</span>
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+      Activo
+    </span>
   ) : (
-    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">Inactivo</span>
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+      Inactivo
+    </span>
   );
 
   return (
@@ -212,7 +238,9 @@ export default function GrupoCuentaPage({ session }) {
 
             <div className="p-4 border-b border-gray-100 bg-white sticky top-0 z-10 space-y-3">
               <div className="relative">
-                <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">search</span>
+                <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+                  search
+                </span>
                 <input
                   className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-sm"
                   placeholder="Buscar grupo..."
@@ -243,20 +271,15 @@ export default function GrupoCuentaPage({ session }) {
                           isActive ? "bg-primary/5 border-l-4 border-primary" : "",
                         ].join(" ")}
                       >
-                        <td className={[
-                          "px-4 py-3.5 font-bold",
-                          isActive ? "text-primary" : "text-gray-900",
-                        ].join(" ")}
+                        <td
+                          className={["px-4 py-3.5 font-bold", isActive ? "text-primary" : "text-gray-900"].join(" ")}
                           onClick={() => startEdit(r)}
                           style={{ cursor: "pointer" }}
                         >
                           {r.codigo || "-"}
                         </td>
                         <td
-                          className={[
-                            "px-4 py-3.5",
-                            isActive ? "text-gray-900 font-medium" : "text-gray-600",
-                          ].join(" ")}
+                          className={["px-4 py-3.5", isActive ? "text-gray-900 font-medium" : "text-gray-600"].join(" ")}
                           onClick={() => startEdit(r)}
                           style={{ cursor: "pointer" }}
                         >
@@ -289,7 +312,9 @@ export default function GrupoCuentaPage({ session }) {
                   })}
                   {!isLoading && filteredRows.length === 0 ? (
                     <tr>
-                      <td className="px-4 py-6 text-gray-400" colSpan={3}>No hay grupos</td>
+                      <td className="px-4 py-6 text-gray-400" colSpan={3}>
+                        No hay grupos
+                      </td>
                     </tr>
                   ) : null}
                 </tbody>
@@ -345,7 +370,9 @@ export default function GrupoCuentaPage({ session }) {
 
             <form className="space-y-8" onSubmit={(e) => e.preventDefault()}>
               <div>
-                <h4 className="text-xs uppercase tracking-wider text-gray-400 font-bold mb-4 border-b border-gray-100 pb-2">Identificación del Grupo</h4>
+                <h4 className="text-xs uppercase tracking-wider text-gray-400 font-bold mb-4 border-b border-gray-100 pb-2">
+                  Identificación del Grupo
+                </h4>
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                   <div className="md:col-span-4">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Código</label>
@@ -358,7 +385,9 @@ export default function GrupoCuentaPage({ session }) {
                     />
                   </div>
                   <div className="md:col-span-8">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Nombre <span className="text-primary">*</span></label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Nombre <span className="text-primary">*</span>
+                    </label>
                     <input
                       className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-sm"
                       type="text"
@@ -371,7 +400,9 @@ export default function GrupoCuentaPage({ session }) {
               </div>
 
               <div>
-                <h4 className="text-xs uppercase tracking-wider text-gray-400 font-bold mb-4 border-b border-gray-100 pb-2">Jerarquía y Detalles</h4>
+                <h4 className="text-xs uppercase tracking-wider text-gray-400 font-bold mb-4 border-b border-gray-100 pb-2">
+                  Jerarquía y Detalles
+                </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Tipo de Grupo</label>
@@ -383,10 +414,14 @@ export default function GrupoCuentaPage({ session }) {
                       >
                         <option value="">- Seleccione -</option>
                         {tipoGrupoOptions.map((o) => (
-                          <option key={o} value={o}>{o}</option>
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
                         ))}
                       </select>
-                      <span className="material-icons absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">expand_more</span>
+                      <span className="material-icons absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">
+                        expand_more
+                      </span>
                     </div>
                   </div>
 
@@ -396,14 +431,21 @@ export default function GrupoCuentaPage({ session }) {
                       <select
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary appearance-none transition-all cursor-pointer hover:bg-gray-100"
                         value={form.id_grupo_padre}
-                        onChange={(e) => setForm((p) => ({ ...p, id_grupo_padre: e.target.value }))}
+                        onChange={(e) => {
+                          setParentTouched(true);
+                          setForm((p) => ({ ...p, id_grupo_padre: e.target.value }));
+                        }}
                       >
                         <option value="">- Ninguno (Grupo raíz) -</option>
                         {padreOptions.map((p) => (
-                          <option key={p.id} value={p.id}>{p.label}</option>
+                          <option key={p.id} value={p.id}>
+                            {p.label}
+                          </option>
                         ))}
                       </select>
-                      <span className="material-icons absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">expand_more</span>
+                      <span className="material-icons absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">
+                        expand_more
+                      </span>
                     </div>
                   </div>
 
@@ -472,6 +514,14 @@ export default function GrupoCuentaPage({ session }) {
           setDeleteOpen(false);
           setDeleteTarget(null);
         }}
+      />
+
+      <ActionResultModal
+        open={resultOpen}
+        kind={resultKind}
+        title={resultTitle}
+        message={resultMessage}
+        onClose={() => setResultOpen(false)}
       />
     </main>
   );

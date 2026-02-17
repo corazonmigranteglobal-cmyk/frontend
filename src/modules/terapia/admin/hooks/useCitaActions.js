@@ -9,6 +9,8 @@ export function useCitaActions({ session, selected, setSolicitudes }) {
     const [reprogOpen, setReprogOpen] = useState(false);
     const [rejectOpen, setRejectOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
+    const [pagadoOpen, setPagadoOpen] = useState(false);
+    const [realizarOpen, setRealizarOpen] = useState(false);
 
     // notes
     const [notes, setNotes] = useState("");
@@ -27,6 +29,14 @@ export function useCitaActions({ session, selected, setSolicitudes }) {
     // confirm
     const [confirmLoading, setConfirmLoading] = useState(false);
     const [confirmError, setConfirmError] = useState("");
+
+    // pagado
+    const [pagadoLoading, setPagadoLoading] = useState(false);
+    const [pagadoError, setPagadoError] = useState("");
+
+    // realizar
+    const [realizarLoading, setRealizarLoading] = useState(false);
+    const [realizarError, setRealizarError] = useState("");
 
     // success modal
     const [successOpen, setSuccessOpen] = useState(false);
@@ -200,6 +210,101 @@ export function useCitaActions({ session, selected, setSolicitudes }) {
         }
     }
 
+    async function handlePagadoSubmit() {
+        if (!selected?.id) return;
+
+        setPagadoLoading(true);
+        setPagadoError("");
+
+        try {
+            const motivo = (notes || "").trim();
+
+            const payload = {
+                p_actor_user_id: session?.user_id,
+                p_id_sesion: session?.id_sesion,
+                p_id_cita: Number(selected.id),
+                p_nuevo_estado: ESTADOS.PAGADO,
+                p_motivo: motivo
+                    ? `${motivo} (Marcado como pagado desde portal administrativo)`
+                    : "Marcado como pagado desde portal administrativo",
+            };
+
+            const resp = await actualizarEstadoCita(payload);
+            const row = resp?.rows?.[0];
+
+            if (resp?.ok !== true) throw new Error(resp?.message || "No se pudo marcar como pagado");
+            if (row?.status && row.status !== "ok") throw new Error(row?.message || "No se pudo marcar como pagado");
+
+            // NOTA: "Pagado" NO reemplaza el estado de la cita.
+            // Se marca un flag independiente (idealmente viene de DB como is_pagado/pagado).
+            setSolicitudes((prev) =>
+                prev.map((s) => {
+                    if (s.id !== selected.id) return s;
+                    return {
+                        ...s,
+                        pagado: true,
+                        raw: { ...(s.raw || {}), is_pagado: true, pagado: true },
+                    };
+                })
+            );
+
+            setPagadoOpen(false);
+            setSuccessMsg(row?.message || "Cita marcada como pagada");
+            setSuccessOpen(true);
+        } catch (e) {
+            setPagadoError(e?.message || "Error marcando como pagado");
+        } finally {
+            setPagadoLoading(false);
+        }
+    }
+
+    async function handleRealizarSubmit() {
+        if (!selected?.id) return;
+
+        setRealizarLoading(true);
+        setRealizarError("");
+
+        try {
+            const motivo = (notes || "").trim();
+
+            const payload = {
+                p_actor_user_id: session?.user_id,
+                p_id_sesion: session?.id_sesion,
+                p_id_cita: Number(selected.id),
+                p_nuevo_estado: ESTADOS.REALIZADO,
+                p_motivo: motivo
+                    ? `${motivo} (Marcado como realizado desde portal administrativo)`
+                    : "Marcado como realizado desde portal administrativo",
+            };
+
+            const resp = await actualizarEstadoCita(payload);
+            const row = resp?.rows?.[0];
+
+            if (resp?.ok !== true) throw new Error(resp?.message || "No se pudo marcar como realizado");
+            if (row?.status && row.status !== "ok") throw new Error(row?.message || "No se pudo marcar como realizado");
+
+            setSolicitudes((prev) =>
+                prev.map((s) => {
+                    if (s.id !== selected.id) return s;
+                    return {
+                        ...s,
+                        estado: ESTADOS.REALIZADO,
+                        estadoBadgeClass: badgeByEstado(ESTADOS.REALIZADO),
+                        raw: { ...(s.raw || {}), estado: ESTADOS.REALIZADO },
+                    };
+                })
+            );
+
+            setRealizarOpen(false);
+            setSuccessMsg(row?.message || "Cita marcada como realizada");
+            setSuccessOpen(true);
+        } catch (e) {
+            setRealizarError(e?.message || "Error marcando como realizado");
+        } finally {
+            setRealizarLoading(false);
+        }
+    }
+
     return {
         // notes
         notes,
@@ -209,6 +314,8 @@ export function useCitaActions({ session, selected, setSolicitudes }) {
         reprogOpen, setReprogOpen,
         rejectOpen, setRejectOpen,
         confirmOpen, setConfirmOpen,
+        pagadoOpen, setPagadoOpen,
+        realizarOpen, setRealizarOpen,
 
         // reprogram state
         reprogDate, setReprogDate,
@@ -225,6 +332,14 @@ export function useCitaActions({ session, selected, setSolicitudes }) {
         // confirm state
         confirmLoading, confirmError,
         handleConfirmSubmit,
+
+        // pagado state
+        pagadoLoading, pagadoError,
+        handlePagadoSubmit,
+
+        // realizar state
+        realizarLoading, realizarError,
+        handleRealizarSubmit,
 
         // success modal
         successOpen, setSuccessOpen,

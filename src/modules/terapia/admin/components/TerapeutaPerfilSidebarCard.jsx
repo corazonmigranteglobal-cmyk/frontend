@@ -18,7 +18,7 @@ export default function TerapeutaPerfilSidebarCard({
   stats,
   onChangePhoto,
 }) {
-  console.log("[TerapeutaPerfilSidebarCard] profile:", profile);
+
   const nombreCompleto = useMemo(() => {
     const n = safeStr(profile?.nombres).trim();
     const a = safeStr(profile?.apellidos).trim();
@@ -39,11 +39,11 @@ export default function TerapeutaPerfilSidebarCard({
   // Por eso priorizamos `profile.foto_url` para que el preview se pinte al instante.
   const foto = safeStr(
     profile?.foto_url ||
-      profile?.raw?.usuario?.foto_perfil_link ||
-      profile?.raw?.usuario?.avatar_url ||
-      profile?.avatar_url ||
-      profile?.link ||
-      profile?.foto
+    profile?.raw?.usuario?.foto_perfil_link ||
+    profile?.raw?.usuario?.avatar_url ||
+    profile?.avatar_url ||
+    profile?.link ||
+    profile?.foto
   ).trim();
   const initials = initialsFromName(nombreCompleto);
 

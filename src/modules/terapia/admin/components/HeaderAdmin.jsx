@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { computeAdminAccess } from "../../../../app/auth/adminAccess";
+import { useDynamicLogo } from "../../../../hooks/useDynamicLogo";
 
 export default function HeaderAdmin({
     session,
@@ -10,9 +12,15 @@ export default function HeaderAdmin({
     setContaModule = null,
 }) {
 
+    const { logoUrl } = useDynamicLogo({ idElemento: 1 });
+
     const adminName = useMemo(() => {
         const u = session?.user || session?.usuario || session?.data || {};
         return u?.nombre_completo || u?.nombre || u?.email || "Admin";
+    }, [session]);
+
+    const access = useMemo(() => {
+        return session?.admin_access || computeAdminAccess(session);
     }, [session]);
     const [isProductsMenuOpen, setIsProductsMenuOpen] = useState(false);
     const productsMenuRef = useRef(null);
@@ -23,13 +31,21 @@ export default function HeaderAdmin({
 
     useEffect(() => {
         const onDocClick = (e) => {
-            if (!isProductsMenuOpen) return;
-            if (!productsMenuRef.current) return;
-            if (!productsMenuRef.current.contains(e.target)) {
+            // Close Productos menu when clicking outside
+            if (
+                isProductsMenuOpen &&
+                productsMenuRef.current &&
+                !productsMenuRef.current.contains(e.target)
+            ) {
                 setIsProductsMenuOpen(false);
             }
 
-            if (isContaMenuOpen && contaMenuRef.current && !contaMenuRef.current.contains(e.target)) {
+            // Close Contabilidad menu when clicking outside
+            if (
+                isContaMenuOpen &&
+                contaMenuRef.current &&
+                !contaMenuRef.current.contains(e.target)
+            ) {
                 setIsContaMenuOpen(false);
             }
         };
@@ -56,7 +72,7 @@ export default function HeaderAdmin({
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
                         <img
-                            src="https://storage.googleapis.com/vistas_publicas_assets/global_assets/media/LOGO%20CORAZON%20MIGRANTE.png"
+                            src={logoUrl}
                             alt="Logo Corazón Migrante"
                             className="w-10 h-10 object-contain"
                             style={{ borderRadius: "25%" }}
@@ -73,60 +89,83 @@ export default function HeaderAdmin({
                 </div>
 
                 <nav className="hidden md:flex items-center gap-1">
-                    <button
-                        type="button"
-                        className={tabClass("solicitudes")}
-                        onClick={() => onNavigate?.("solicitudes")}
-                    >
-                        Solicitudes
-                    </button>
-
-                    <button
-                        type="button"
-                        className={tabClass("terapeutas")}
-                        onClick={() => onNavigate?.("terapeutas")}
-                    >
-                        Terapeutas
-                    </button>
-
-                    <button
-                        type="button"
-                        className={tabClass("usuarios")}
-                        onClick={() => onNavigate?.("usuarios")}
-                    >
-                        Usuarios
-                    </button>
-
-                    <button
-                        type="button"
-                        className={tabClass("miPerfil")}
-                        onClick={() => onNavigate?.("miPerfil")}
-                    >
-                        Mi perfil
-                    </button>
-
-                    {/* Contabilidad (con submenú: Cuenta / Grupo / Centro / Transacción) */}
-                    <div className="relative" ref={contaMenuRef}>
+                    {access?.solicitudes ? (
                         <button
                             type="button"
-                            className={tabClass("contabilidad")}
-                            onClick={() => setIsContaMenuOpen((v) => !v)}
+                            className={tabClass("solicitudes")}
+                            onClick={() => onNavigate?.("solicitudes")}
                         >
-                            <span className="inline-flex items-center gap-2">
-                                Contabilidad
-                                <span className="material-symbols-outlined text-[18px]">expand_more</span>
-                            </span>
+                            Solicitudes
                         </button>
+                    ) : null}
 
-                        {isContaMenuOpen && (
-                            <div className="absolute left-0 mt-2 w-64 bg-white border border-slate-200 shadow-lg rounded-xl overflow-hidden z-50">
+                    {access?.terapeutas ? (
+                        <button
+                            type="button"
+                            className={tabClass("terapeutas")}
+                            onClick={() => onNavigate?.("terapeutas")}
+                        >
+                            Terapeutas
+                        </button>
+                    ) : null}
+
+                    {access?.usuarios ? (
+                        <button
+                            type="button"
+                            className={tabClass("usuarios")}
+                            onClick={() => onNavigate?.("usuarios")}
+                        >
+                            Usuarios
+                        </button>
+                    ) : null}
+
+                    {access?.miPerfil ? (
+                        <button
+                            type="button"
+                            className={tabClass("miPerfil")}
+                            onClick={() => onNavigate?.("miPerfil")}
+                        >
+                            Mi perfil
+                        </button>
+                    ) : null}
+
+                    {/* Contabilidad (con submenú: Cuenta / Grupo / Centro / Transacción) */}
+                    {access?.contabilidad ? (
+                        <div className="relative" ref={contaMenuRef}>
+                            <button
+                                type="button"
+                                className={tabClass("contabilidad")}
+                                onClick={() => {
+                                // Keep only one dropdown open at a time
+                                setIsProductsMenuOpen(false);
+
+                                // If we are coming from another module, navigate first so the Contabilidad pages mount
+                                if (activeTab !== "contabilidad") {
+                                    // Navigate directly to the contabilidad sub-route
+                                    const nextModule = contaModule || "cuenta";
+                                    onNavigate?.(`contabilidad/${nextModule}`);
+                                    setIsContaMenuOpen(true);
+                                    return;
+                                }
+
+                                // If already in contabilidad, just toggle the dropdown
+                                setIsContaMenuOpen((v) => !v);
+                                }}
+                            >
+                                <span className="inline-flex items-center gap-2">
+                                    Contabilidad
+                                    <span className="material-symbols-outlined text-[18px]">expand_more</span>
+                                </span>
+                            </button>
+
+                            {isContaMenuOpen && (
+                                <div className="absolute left-0 mt-2 w-64 bg-white border border-slate-200 shadow-lg rounded-xl overflow-hidden z-50">
                                 <button
                                     type="button"
                                     className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm"
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
-                                        setContaModule?.("cuenta");
-                                        if (!setContaModule) onNavigate?.("contabilidad");
+                                        onNavigate?.("contabilidad/cuenta");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">account_tree</span>
@@ -143,8 +182,7 @@ export default function HeaderAdmin({
                                     className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm"
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
-                                        setContaModule?.("grupo_cuenta");
-                                        if (!setContaModule) onNavigate?.("contabilidad");
+                                        onNavigate?.("contabilidad/grupo_cuenta");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">folder</span>
@@ -161,8 +199,7 @@ export default function HeaderAdmin({
                                     className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm"
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
-                                        setContaModule?.("centro_costo");
-                                        if (!setContaModule) onNavigate?.("contabilidad");
+                                        onNavigate?.("contabilidad/centro_costo");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">apartment</span>
@@ -179,8 +216,7 @@ export default function HeaderAdmin({
                                     className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm"
                                     onClick={() => {
                                         setIsContaMenuOpen(false);
-                                        setContaModule?.("transaccion");
-                                        if (!setContaModule) onNavigate?.("contabilidad");
+                                        onNavigate?.("contabilidad/transaccion");
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[18px] text-primary">receipt_long</span>
@@ -189,25 +225,33 @@ export default function HeaderAdmin({
                                         <span className="text-[11px] text-slate-500">Libro diario</span>
                                     </div>
                                 </button>
-                            </div>
-                        )}
-                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ) : null}
 
 
-                    <button
-                        type="button"
-                        className={tabClass("vistasPublicas")}
-                        onClick={() => onNavigate?.("vistasPublicas")}
-                    >
-                        Vistas publicas
-                    </button>
+                    {access?.vistasPublicas ? (
+                        <button
+                            type="button"
+                            className={tabClass("vistasPublicas")}
+                            onClick={() => onNavigate?.("vistasPublicas")}
+                        >
+                            Vistas publicas
+                        </button>
+                    ) : null}
 
                     {/* Productos (con submenú: Enfoques / Productos) */}
+                    {access?.productos ? (
                     <div className="relative" ref={productsMenuRef}>
                         <button
                             type="button"
                             className={tabClass("productos")}
-                            onClick={() => setIsProductsMenuOpen((v) => !v)}
+                            onClick={() => {
+                                // Keep only one dropdown open at a time
+                                setIsContaMenuOpen(false);
+                                setIsProductsMenuOpen((v) => !v);
+                            }}
                         >
                             <span className="inline-flex items-center gap-2">
                                 Productos
@@ -251,6 +295,7 @@ export default function HeaderAdmin({
                             </div>
                         )}
                     </div>
+                    ) : null}
                 </nav>
             </div>
 

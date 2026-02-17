@@ -10,6 +10,7 @@ import PublicLoginPage from "../auth/PublicLoginPage";
 import PublicSignupPage from "../auth/PublicSignupPage";
 
 import HeroSection from "../components/landing/sections/HeroSection";
+import ImpactPanelSection from "../components/landing/sections/ImpactPanelSection";
 import MapSection from "../components/landing/sections/MapSection";
 import MissionSection from "../components/landing/sections/MissionSection";
 import EmotionsSection from "../components/landing/sections/EmotionsSection";
@@ -30,7 +31,7 @@ function smoothScrollToHash(href) {
 export default function LandingHome() {
   const [view, setView] = useState("landing"); // landing | login | signup
 
-  const { content, loading, error } = useLandingContent();
+  const { content, uiById, resolveUiUrl, loading, error } = useLandingContent();
 
   const runAction = useCallback((action, href) => {
     switch (action) {
@@ -46,7 +47,7 @@ export default function LandingHome() {
         return;
 
       case "portal_admin":
-        console.log("portal_admin");
+
         return;
 
       case "open_booking_or_availability":
@@ -60,7 +61,7 @@ export default function LandingHome() {
     }
   }, []);
 
-  
+
   if (view === "login") {
     return <PublicLoginPage onBack={() => setView("landing")} />;
   }
@@ -74,7 +75,7 @@ export default function LandingHome() {
     );
   }
 
-if (loading && !content) {
+  if (loading && !content) {
     return (
       <div className="min-h-screen bg-background-light dark:bg-background-dark">
         <div className="h-16" />
@@ -111,6 +112,26 @@ if (loading && !content) {
   const navbar = content?.navbar;
   const hero = content?.hero;
   const sections = content?.sections || {};
+
+  // Nuevo contrato: presentation_section viene desde DB/JSON público
+  const presentationSection = content?.presentation_section || null;
+
+  // Fallback mínimo (solo si el backend aún no envía presentation_section)
+  const presentationFallback = {
+    badge: { icon: "favorite", text: "Acompañamiento emocional para migrantes" },
+    title: "Migrar no es solo cambiar de país",
+    subtitle: "Es cargar una historia entera en el pecho. Aquí puedes sostenerte, paso a paso.",
+    description: [
+      "Ansiedad, culpa migratoria y nostalgia",
+      "Atención online, confidencial y humana",
+      "Profesionales con enfoque clínico",
+    ],
+    primary_cta: { label: "Agendar una cita", action: "scroll_to_contacto", href: "#contacto" },
+    secondary_cta: { label: "Conocer emociones", action: "scroll_to_emociones", href: "#emociones" },
+    img: { id_ui: null, alt: "Personas caminando", fallback_src: "" },
+    img_footer_text: "“Cuando migras, no te vas solo: te llevas tu gente, tu idioma y tu historia.”",
+  };
+
   const footer = content?.footer;
   const ui = content?.ui;
   const telefono = content?.telefono;
@@ -118,8 +139,7 @@ if (loading && !content) {
   const dev = import.meta.env.DEV;
 
   if (dev) {
-    console.log("landing content:", content);
-    console.log("landing loading:", loading, "error:", error);
+    // console logs removed
   }
 
   const hasSchema =
@@ -148,13 +168,19 @@ if (loading && !content) {
   return (
     <div id="inicio" className="bg-background-light dark:bg-background-dark transition-colors duration-300 antialiased">
       <ScrollProgress />
-      <LandingNavbar data={navbar} onAction={runAction} />
+      <LandingNavbar data={navbar} uiById={uiById} onAction={runAction} />
+
+      <ImpactPanelSection
+        data={presentationSection || presentationFallback}
+        onAction={runAction}
+        resolveUiUrl={resolveUiUrl}
+      />
 
       <HeroSection data={hero} onAction={runAction} />
 
-      <MapSection data={sections.map} onAction={runAction} />
-      <MissionSection data={sections.mission} onAction={runAction} />
-      <EmotionsSection data={sections.emotions} />
+      <MapSection data={sections.map} uiById={uiById} onAction={runAction} />
+      <MissionSection data={sections.mission} uiById={uiById} onAction={runAction} />
+      <EmotionsSection data={sections.emotions} uiById={uiById} />
       <PsychologistsSection data={sections.psicologists} />
       <CTASection data={sections.cta} onAction={runAction} telefono={telefono} />
 

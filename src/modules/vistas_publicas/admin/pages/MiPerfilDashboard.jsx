@@ -5,6 +5,7 @@ import PerfilSidebar from "../components/PerfilSidebar";
 import PerfilForm from "../components/PerfilForm";
 import { useMiPerfil } from "../hooks/useMiPerfil";
 import PasswordRecoveryModal from "../../../auth/admin/components/PasswordRecoveryModal";
+import ActionResultModal from "../../../../app/components/modals/ActionResultModal";
 import { useState } from "react";
 
 export default function MiPerfilDashboard({
@@ -16,6 +17,19 @@ export default function MiPerfilDashboard({
   setContaModule,
 }) {
   const [isPwdModalOpen, setIsPwdModalOpen] = useState(false);
+
+  const [resultOpen, setResultOpen] = useState(false);
+  const [resultKind, setResultKind] = useState("info");
+  const [resultTitle, setResultTitle] = useState("");
+  const [resultMessage, setResultMessage] = useState("");
+
+  const showResult = (kind, message, title = "") => {
+    setResultKind(kind || "info");
+    setResultTitle(title || "");
+    setResultMessage(message || "");
+    setResultOpen(true);
+  };
+
 
   const {
     userType,
@@ -63,6 +77,7 @@ export default function MiPerfilDashboard({
 
             <div className="lg:col-span-2">
               <PerfilForm
+                session={session}
                 userType={userType}
                 profile={profile}
                 setField={setField}
@@ -75,7 +90,7 @@ export default function MiPerfilDashboard({
                 onSave={async () => {
                   try {
                     await save();
-                    alert("Perfil actualizado.");
+                    showResult("success", "Perfil actualizado.", "Listo");
                   } catch {
                     // error ya manejado en el hook
                   }
@@ -84,6 +99,15 @@ export default function MiPerfilDashboard({
             </div>
           </div>
         )}
+
+
+        <ActionResultModal
+          open={resultOpen}
+          kind={resultKind}
+          title={resultTitle}
+          message={resultMessage}
+          onClose={() => setResultOpen(false)}
+        />
 
         <PasswordRecoveryModal
           open={isPwdModalOpen}

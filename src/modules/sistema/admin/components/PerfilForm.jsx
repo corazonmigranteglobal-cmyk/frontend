@@ -1,4 +1,14 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { USUARIOS_ENDPOINTS } from "../../../../config/USUARIOS_ENDPOINTS";
+import { createApiConn } from "../../../../helpers/api_conn_factory";
+
+function getTerapeutaNombreFromApiResponse(apiData) {
+  if (!apiData) return "";
+  const usuario = apiData.usuario;
+  if (!usuario) return "";
+
+  return `${usuario.nombre ?? ""} ${usuario.apellido ?? ""}`.trim();
+}
 
 const INPUT =
   "w-full px-4 py-3 bg-white border border-border-light rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-slate-800 text-sm shadow-sm";
@@ -7,7 +17,34 @@ function normUserType(userType) {
   return (userType || "").toString().trim().toLowerCase();
 }
 
+function toIdStr(v) {
+  return v === undefined || v === null ? "" : String(v).trim();
+}
+
+function pickTerapeutaId(t) {
+  if (!t) return "";
+  // cubrir variantes comunes de backends
+  return toIdStr(
+    t.id_usuario_terapeuta ??
+    t.id_usuario ??
+    t.usuario_id ??
+    t.user_id ??
+    t.id ??
+    t.terapeuta_id
+  );
+}
+
+function pickTerapeutaLabel(t, idFallback) {
+  if (!t) return idFallback ? `#${idFallback}` : "";
+  const label =
+    toIdStr(t.terapeuta_nombre_completo) ||
+    toIdStr(t.nombre_completo) ||
+    `${t.p_nombre ?? t.nombre ?? ""} ${t.p_apellido ?? t.apellido ?? ""}`.trim();
+  return label || (idFallback ? `#${idFallback}` : "");
+}
+
 export default function PerfilForm({
+  session,
   userType,
   profile,
   setField,
@@ -38,7 +75,91 @@ export default function PerfilForm({
   // Fields (planos)
   const sexo = profile?.sexo || ""; // "Masculino"/"Femenino" o "M"/"F"
   const fechaNacimiento = profile?.fecha_nacimiento || ""; // "YYYY-MM-DD"
-  const idUsuarioTerapeuta = profile?.id_usuario_terapeuta || "";
+  // ⚠️ select trabaja con strings (DOM). Normalizamos para que matchee options.
+  const idUsuarioTerapeuta = toIdStr(profile?.id_usuario_terapeuta);
+  const [assignedTerapeutaLabel, setAssignedTerapeutaLabel] = useState("");
+
+  useEffect(() => {
+    const id = idUsuarioTerapeuta;
+    if (!id) {
+      setAssignedTerapeutaLabel("");
+      return;
+    }
+
+    // ✅ necesitamos sesión real
+    if (!session?.id_sesion || !session?.user_id) {
+      // sin sesión no podemos consultar el nombre
+      return;
+    }
+
+    const cacheKey = `terapeuta_${id}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      setAssignedTerapeutaLabel(cached);
+      return;
+    }
+
+    // Si ya viene en la lista del endpoint sin-admin, no consultamos
+    const existsInList = (Array.isArray(terapeutasDisponibles) ? terapeutasDisponibles : [])
+      .some((t) => pickTerapeutaId(t) === id);
+
+    if (existsInList) return;
+
+    // ✅ Llamada consistente con tu front: createApiConn + session
+    (async () => {
+      try {
+        const payload = {
+          p_user_id: Number(id),
+          p_id_sesion: session.id_sesion,
+          p_actor_user_id: session.user_id,
+        };
+
+        // En tu hook de perfil, este endpoint se llama con PATCH.
+        const res = await createApiConn(
+          USUARIOS_ENDPOINTS.OBTENER_TERAPEUTA,
+          payload,
+          "PATCH",
+          session
+        );
+
+        const data = res?.rows?.[0]?.api_usuario_terapeuta_obtener?.data;
+        const nombre = getTerapeutaNombreFromApiResponse(data);
+
+        if (nombre) {
+          sessionStorage.setItem(cacheKey, nombre);
+          setAssignedTerapeutaLabel(nombre);
+        }
+      } catch {
+        console.error("Error al obtener el terapeuta");
+      }
+    })();
+  }, [idUsuarioTerapeuta, terapeutasDisponibles, session]);
+
+  const terapeutasOptions = (() => {
+    const base = Array.isArray(terapeutasDisponibles) ? terapeutasDisponibles : [];
+    const normalized = base
+      .map((t) => {
+        const id = pickTerapeutaId(t);
+        return {
+          id,
+          label: pickTerapeutaLabel(t, id),
+        };
+      })
+      .filter((x) => !!x.id);
+
+    const hasSelected = !!idUsuarioTerapeuta;
+    const selectedExists = hasSelected && normalized.some((x) => x.id === idUsuarioTerapeuta);
+
+    if (hasSelected && !selectedExists) {
+      const id = idUsuarioTerapeuta;
+      const label =
+        assignedTerapeutaLabel ||
+        `Terapeuta actual (#${id})`;
+
+      normalized.unshift({ id, label });
+    }
+    return normalized;
+  })();
 
   const isSuperAdmin = !!profile?.is_super_admin;
   const canManageFiles = !!profile?.can_manage_files;
@@ -108,16 +229,31 @@ export default function PerfilForm({
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 ml-1">Correo electrónico</label>
+            <div className="space-y-2 relative group">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-700 ml-1">Correo electrónico</label>
+
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-slate-300 text-slate-600 text-[12px] cursor-help">
+                  i
+                </span>
+              </div>
+
+              <div
+                className="pointer-events-none absolute left-1 top-0 -translate-y-3 opacity-0 group-hover:opacity-100 transition
+               bg-slate-900 text-white text-xs px-3 py-2 rounded-lg shadow-lg"
+              >
+                Este campo no es modificable
+              </div>
+
               <input
                 className={INPUT}
                 type="email"
                 value={profile?.email || ""}
                 onChange={(e) => setField("email", e.target.value)}
-                disabled={loading || saving}
+                disabled={true}
               />
             </div>
+
 
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-700 ml-1">Teléfono</label>
@@ -139,10 +275,8 @@ export default function PerfilForm({
                 disabled={loading || saving}
               >
                 <option value="">Seleccionar</option>
-                <option value="Masculino">Masculino</option>
-                <option value="Femenino">Femenino</option>
-                <option value="M">M</option>
-                <option value="F">F</option>
+                <option value="M">Masculino</option>
+                <option value="F">Femenino</option>
               </select>
             </div>
 
@@ -203,15 +337,11 @@ export default function PerfilForm({
                 disabled={loading || saving}
               >
                 <option value="">Sin terapeuta asignado</option>
-                {(terapeutasDisponibles || []).map((t) => {
-                  const id = t.id_usuario_terapeuta || t.usuario_id || t.id;
-                  const label = t.terapeuta_nombre_completo || `${t.p_nombre ?? ""} ${t.p_apellido ?? ""}`.trim();
-                  return (
-                    <option key={id} value={id}>
-                      {label || `#${id}`}
-                    </option>
-                  );
-                })}
+                {terapeutasOptions.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
               </select>
               <p className="text-[11px] text-slate-500">
                 Selecciona un terapeuta si este administrador gestionará su cuenta.

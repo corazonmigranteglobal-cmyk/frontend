@@ -127,18 +127,7 @@ export default function TerapeutaPerfilDashboard({
               </p>
             </div>
 
-            <div className="flex items-center gap-3 pb-1">
-              <button
-                type="button"
-                onClick={() =>
-                  setSuccessModal({ open: true, message: "Pendiente: abrir perfil público" })
-                }
-                className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-600 text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-slate-50 transition-all"
-              >
-                <span className="material-symbols-outlined text-sm">visibility</span>
-                Ver Perfil Público
-              </button>
-            </div>
+
           </div>
 
           {error ? (
@@ -201,6 +190,7 @@ export default function TerapeutaPerfilDashboard({
         open={openHorarioModal}
         onClose={() => setOpenHorarioModal(false)}
         isSaving={Boolean(creatingHorario)}
+        defaultTimeZone={profile?.timezone || null}
         onSubmit={async (form) => {
           try {
             await createHorarioFromModal(form);

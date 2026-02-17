@@ -1,4 +1,5 @@
 import { useAdminLogin } from "../hooks/useAdminLogin";
+import { useDynamicLogo } from "../../../../hooks/useDynamicLogo";
 
 /**
  * AdminLoginPage (AUTH)
@@ -7,6 +8,7 @@ import { useAdminLogin } from "../hooks/useAdminLogin";
  */
 export default function AdminLoginPage({ onLoginSuccess }) {
   const s = useAdminLogin({ onLoginSuccess });
+  const { logoUrl } = useDynamicLogo({ idElemento: 1 });
 
   return (
     <div className="min-h-screen flex w-full font-display antialiased text-slate-800 bg-background-light dark:bg-background-dark">
@@ -54,7 +56,7 @@ export default function AdminLoginPage({ onLoginSuccess }) {
               style={{ display: "flex", alignItems: "center", justifyContent: "start", width: "100%" }}
             >
               <img
-                src="https://storage.googleapis.com/vistas_publicas_assets/global_assets/media/LOGO%20CORAZON%20MIGRANTE.png"
+                src={logoUrl}
                 alt="Logo Corazón Migrante"
                 className="w-10 h-10 object-contain"
                 style={{ borderRadius: "50%" }}
