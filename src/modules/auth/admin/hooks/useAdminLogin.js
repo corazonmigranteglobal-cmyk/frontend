@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { createApiConn } from "../../../../helpers/api_conn_factory";
 import { USUARIOS_ENDPOINTS } from "../../../../config/USUARIOS_ENDPOINTS";
 import { computeAdminAccess } from "../../../../app/auth/adminAccess";
+import { ROUTES_FILE_SERVER } from "../../../../config/ROUTES_FILE_SERVER";
 
 export function useAdminLogin({ onLoginSuccess } = {}) {
   const [email, setEmail] = useState("");
@@ -40,12 +41,6 @@ export function useAdminLogin({ onLoginSuccess } = {}) {
   const [requestNewPinLoading, setRequestNewPinLoading] = useState(false);
   const [requestNewPinOkMessage, setRequestNewPinOkMessage] = useState("");
   const [requestNewPinError, setRequestNewPinError] = useState("");
-
-  const bgUrl = useMemo(
-    () =>
-      "https://storage.googleapis.com/vistas_publicas_assets/admin_portal/media/Banner%20portal%20administrativo",
-    []
-  );
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -359,7 +354,7 @@ export function useAdminLogin({ onLoginSuccess } = {}) {
     passwordError,
     isLoading,
     isSuccess,
-    bgUrl,
+    ROUTES_FILE_SERVER.URL_AUTH,
     handleSubmit,
 
     // forgot modal
