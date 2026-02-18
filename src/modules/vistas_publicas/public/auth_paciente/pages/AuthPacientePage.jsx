@@ -734,6 +734,7 @@ export default function AuthPacientePage({ onBack, onGoLogin, initialMode } = {}
 
   const isRegister = mode === "register";
 
+
   const ocup = useRemoteJsonList(ROUTES_FILE_SERVER.URL_OCUPACIONES);
   const sintomas = useRemoteJsonList(ROUTES_FILE_SERVER.URL_SINTOMAS);
   const objetivos = useRemoteJsonList(ROUTES_FILE_SERVER.URL_OBJETIVOS);
@@ -912,21 +913,6 @@ export default function AuthPacientePage({ onBack, onGoLogin, initialMode } = {}
                             ))}
                           </Select>
                         </div>
-                      </div>
-
-                      <div className="mt-4">
-                        <MultiSelectTags
-                          id="ocupacion"
-                          label="Ocupación"
-                          leftIcon="work"
-                          placeholder="Ej: Analista, Docente, Vendedor..."
-                          options={ocup.items}
-                          loading={ocup.loading}
-                          error={ocup.error}
-                          disabled={loading}
-                          value={registerForm.ocupacion}
-                          onChange={(v) => setRegisterField("ocupacion", v)}
-                        />
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

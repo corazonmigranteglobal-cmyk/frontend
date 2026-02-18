@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createApiConn } from "../../../../helpers/api_conn_factory";
 import { USUARIOS_ENDPOINTS } from "../../../../config/USUARIOS_ENDPOINTS";
 import { computeAdminAccess } from "../../../../app/auth/adminAccess";
@@ -354,7 +354,7 @@ export function useAdminLogin({ onLoginSuccess } = {}) {
     passwordError,
     isLoading,
     isSuccess,
-    ROUTES_FILE_SERVER.URL_AUTH,
+    bgUrl: ROUTES_FILE_SERVER.URL_AUTH,
     handleSubmit,
 
     // forgot modal
