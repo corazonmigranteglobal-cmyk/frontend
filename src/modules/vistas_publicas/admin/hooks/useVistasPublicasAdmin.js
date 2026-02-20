@@ -135,6 +135,7 @@ export function useVistasPublicasAdmin(session) {
     const [lastSaveOk, setLastSaveOk] = useState(null);
 
     // ---------------- ENDPOINT: LIST UI ELEMENTS
+    // ---------------- ENDPOINT: LIST UI ELEMENTS
     const listUiComponents = useCallback(
         async ({ limit = uiLimit, offset = uiOffset } = {}) => {
             if (!session) return;
@@ -164,8 +165,27 @@ export function useVistasPublicasAdmin(session) {
                     raw: r,
                 }));
 
-                setUiComponents(mapped);
+                // ✅ Dedup por id (como todas son idénticas, nos quedamos con la primera)
+                const deduped = [];
+                const seenIds = new Set();
 
+                for (const it of mapped) {
+                    const id = it?.id;
+
+                    // si llega algo raro sin id, lo dejamos pasar
+                    if (id == null) {
+                        deduped.push(it);
+                        continue;
+                    }
+
+                    if (seenIds.has(id)) continue;
+                    seenIds.add(id);
+                    deduped.push(it);
+                }
+
+                setUiComponents(deduped);
+
+                // 👇 pagination basada en lo que devuelve el backend (antes de dedupe)
                 setUiHasNext(rows.length === limit);
                 setUiLimit(limit);
                 setUiOffset(offset);
