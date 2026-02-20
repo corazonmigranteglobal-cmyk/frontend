@@ -5,7 +5,7 @@ import { useAdminOptions } from "../context/AdminOptionsContext";
 import ActionResultModal from "../../../../app/components/modals/ActionResultModal";
 
 // Reuse the same lists as usersForm (fetched dynamically)
-export default function EditUserModal({ isOpen, onClose, user, session }) {
+export default function EditUserModal({ isOpen, onClose, user, session, onUpdated }) {
     const [loading, setLoading] = useState(true);
     const [userType, setUserType] = useState(null); // "admin" | "terapeuta"
 
@@ -48,7 +48,12 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
         auditoria: false,
     });
 
-    const { profesiones: profesionesList, especialidades: especialidadesList, paises, getCiudades } = useAdminOptions();
+    const {
+        profesiones: profesionesList,
+        especialidades: especialidadesList,
+        paises,
+        getCiudades,
+    } = useAdminOptions();
 
     const paisOptions = useMemo(() => {
         const arr = Array.isArray(paises) ? paises : [];
@@ -78,13 +83,24 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
 
     // Determine user type from role
     const determineUserType = (role) => {
-        const adminRoles = ["SUPER_ADMIN", "ADMIN"];
+        const adminRoles = ["SUPER_ADMIN", "ADMIN", "ACCOUNTER", "CONTABILIDAD"];
         const terapeutaRoles = ["TERAPEUTA"];
 
-        if (adminRoles.includes(role?.toUpperCase())) return "admin";
-        if (terapeutaRoles.includes(role?.toUpperCase())) return "terapeuta";
-        return null; // PACIENTE, USUARIO - not editable
+        const r = (role || "").toString().toUpperCase();
+        if (adminRoles.includes(r)) return "admin";
+        if (terapeutaRoles.includes(r)) return "terapeuta";
+        return null; // PACIENTE, USUARIO - no editable
     };
+
+    const normalizeSexo = (v) => {
+        const s = (v ?? "").toString().trim();
+        if (!s) return null;
+        if (s === "F" || s.toLowerCase() === "f" || s.toLowerCase() === "femenino") return "F";
+        if (s === "M" || s.toLowerCase() === "m" || s.toLowerCase() === "masculino") return "M";
+        return s;
+    };
+
+    const safeStr = (v) => (v === undefined || v === null ? "" : String(v));
 
     // Fetch user data
     useEffect(() => {
@@ -101,18 +117,17 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
         const fetchUserData = async () => {
             setLoading(true);
             try {
-                const endpoint = type === "admin"
-                    ? USUARIOS_ENDPOINTS.OBTENER_ADMIN
-                    : USUARIOS_ENDPOINTS.OBTENER_TERAPEUTA;
+                const endpoint =
+                    type === "admin" ? USUARIOS_ENDPOINTS.OBTENER_ADMIN : USUARIOS_ENDPOINTS.OBTENER_TERAPEUTA;
 
                 const payload = {
                     p_actor_user_id: session.user_id,
                     p_id_sesion: session.id_sesion,
-                    p_user_id: user.id
+                    p_user_id: user.id,
                 };
 
-                const response = await createApiConn(endpoint, payload, "PATCH");
-
+                // ✅ IMPORTANTE: pasar session al createApiConn (antes lo omitías)
+                const response = await createApiConn(endpoint, payload, "PATCH", session);
 
                 if (response && response.rows && response.rows.length > 0) {
                     const row = response.rows[0];
@@ -136,7 +151,7 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
                     setApellido(userData.apellido || "");
                     setTelefono(userData.telefono || "");
                     setSexo(userData.sexo || "");
-                    setFechaNacimiento(userData.fecha_nacimiento ? userData.fecha_nacimiento.split('T')[0] : "");
+                    setFechaNacimiento(userData.fecha_nacimiento ? userData.fecha_nacimiento.split("T")[0] : "");
 
                     if (type === "terapeuta") {
                         // Populate terapeuta-specific fields
@@ -148,33 +163,138 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
                         setMatriculaProfesional(specificData.matricula_profesional || "");
                         setPais(specificData.pais || "");
                         setCiudad(specificData.ciudad || "");
-                        setValorSesionBase(specificData.valor_sesion_base || "");
+                        setValorSesionBase(
+                            specificData.valor_sesion_base === null || specificData.valor_sesion_base === undefined
+                                ? ""
+                                : String(specificData.valor_sesion_base)
+                        );
                     }
 
                     if (type === "admin") {
                         // Populate admin-specific fields
                         setPrivs({
-                            superAdmin: specificData.is_super_admin || false,
-                            expedientes: specificData.can_manage_files || false,
-                            auditoria: specificData.is_accounter || false,
+                            superAdmin: !!specificData.is_super_admin,
+                            expedientes: !!specificData.can_manage_files,
+                            auditoria: !!specificData.is_accounter,
                         });
                     }
                 }
             } catch (err) {
                 console.error("Error fetching user data:", err);
+                showResult("error", err?.message || "Error al cargar datos del usuario.", "Error");
             } finally {
                 setLoading(false);
             }
         };
 
         fetchUserData();
-    }, [isOpen, user, session]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, user?.id, user?.role, session?.user_id, session?.id_sesion]);
 
-    const handleSubmit = () => {
-        // TODO: Implement update API call
+    const buildPatchTerapeuta = () => {
+        // ✅ p_patch EXACTO como tu ejemplo (solo campos terapeuta)
+        return {
+            titulo_profesional: safeStr(tituloProfesional).trim() || null,
+            especialidad_principal: safeStr(especialidadPrinc).trim() || null,
+            descripcion_perfil: safeStr(descripcionPerfil).trim() || null,
+            frase_personal: safeStr(frasePersonal).trim() || null,
+            link_video_youtube: safeStr(linkVideoYoutube).trim() || null,
+            matricula_profesional: safeStr(matriculaProfesional).trim() || null,
+            pais: safeStr(pais).trim() || null,
+            ciudad: safeStr(ciudad).trim() || null,
+            valor_sesion_base:
+                valorSesionBase === "" || valorSesionBase === null || valorSesionBase === undefined
+                    ? null
+                    : Number(valorSesionBase),
+        };
+    };
 
-        showResult("info", "Pendiente: conectar con endpoint de actualización", "Información");
-        onClose();
+    const buildPatchAdmin = () => {
+        // ✅ admin via p_patch (ajusta keys si tu backend usa otros nombres)
+        return {
+            is_super_admin: !!privs.superAdmin,
+            can_manage_files: !!privs.expedientes,
+            is_accounter: !!privs.auditoria,
+
+            // Si tu backend también permite campos comunes por patch, puedes descomentar:
+            // email: safeStr(email).trim() || null,
+            // nombre: safeStr(nombre).trim() || null,
+            // apellido: safeStr(apellido).trim() || null,
+            // telefono: safeStr(telefono).trim() || null,
+            // sexo: normalizeSexo(sexo),
+            // fecha_nacimiento: safeStr(fechaNacimiento).trim() || null,
+        };
+    };
+
+    const handleSubmit = async () => {
+        if (!session?.user_id || !session?.id_sesion) {
+            showResult("error", "Sesión inválida. Vuelve a iniciar sesión.", "Error");
+            return;
+        }
+        if (!user?.id) {
+            showResult("error", "No se pudo resolver el usuario a actualizar.", "Error");
+            return;
+        }
+        if (!userType) {
+            showResult("info", "Este tipo de usuario no es editable.", "Información");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            // Normalizamos sexo por si luego lo incorporas al patch
+            // (en este patch de terapeuta/admin no lo usamos por tu ejemplo)
+            normalizeSexo(sexo);
+
+            let endpoint = null;
+            let p_patch = null;
+
+            if (userType === "terapeuta") {
+                endpoint = USUARIOS_ENDPOINTS.UPDATE_USUARIOS_TERAPEUTA;
+                p_patch = buildPatchTerapeuta();
+            } else if (userType === "admin") {
+                endpoint = USUARIOS_ENDPOINTS.UPDATE_USUARIOS_ADMIN;
+                p_patch = buildPatchAdmin();
+            }
+
+            if (!endpoint) {
+                showResult("error", "No hay endpoint configurado para este tipo de usuario.", "Error");
+                return;
+            }
+            if (!p_patch) {
+                showResult("info", "No hay campos para actualizar.", "Información");
+                return;
+            }
+
+            const payload = {
+                p_actor_user_id: session.user_id,
+                p_id_sesion: session.id_sesion,
+                p_user_id: user.id,
+                p_patch,
+            };
+
+            const response = await createApiConn(endpoint, payload, "PATCH", session);
+
+            const ok =
+                response?.rows?.[0]?.status === "ok" ||
+                response?.status === "ok" ||
+                response?.ok === true;
+
+            if (ok) {
+                showResult("success", "Actualización realizada exitosamente.", "Listo");
+                await onUpdated?.();
+                onClose?.();
+                return;
+            }
+
+            const msg = response?.rows?.[0]?.message || response?.message || "Error al actualizar.";
+            showResult("error", msg, "Ocurrió un problema");
+        } catch (err) {
+            console.error("Error en actualización:", err);
+            showResult("error", err?.message || "Error al procesar la actualización.", "Ocurrió un problema");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const toggle = (k) => (e) => setPrivs((p) => ({ ...p, [k]: e.target.checked }));
@@ -190,22 +310,18 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
                 message={resultMessage}
                 onClose={() => setResultOpen(false)}
             />
+
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                 <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-xl overflow-hidden flex flex-col">
                     {/* Header */}
                     <div className="px-7 py-5 border-b border-slate-200 bg-brand-cream flex items-center justify-between">
                         <div>
-                            <h3 className="text-lg font-bold text-slate-900">
-                                Editar Usuario
-                            </h3>
+                            <h3 className="text-lg font-bold text-slate-900">Editar Usuario</h3>
                             <p className="text-xs text-slate-500 mt-1">
                                 {userType === "admin" ? "Administrador" : userType === "terapeuta" ? "Terapeuta" : "Usuario"}
                             </p>
                         </div>
-                        <button
-                            onClick={onClose}
-                            className="text-slate-400 hover:text-slate-600 transition-colors"
-                        >
+                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
                             <span className="material-symbols-outlined">close</span>
                         </button>
                     </div>
@@ -336,9 +452,7 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
                                 {/* Terapeuta-specific fields */}
                                 {userType === "terapeuta" && (
                                     <div className="border-t border-dashed border-slate-200 pt-6 space-y-4">
-                                        <p className="text-xs font-bold text-primary uppercase tracking-widest">
-                                            Datos Profesionales
-                                        </p>
+                                        <p className="text-xs font-bold text-primary uppercase tracking-widest">Datos Profesionales</p>
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
@@ -351,8 +465,10 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
                                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer"
                                                 >
                                                     <option value="">Seleccionar Título</option>
-                                                    {profesionesList.map((prof) => (
-                                                        <option key={prof} value={prof}>{prof}</option>
+                                                    {(Array.isArray(profesionesList) ? profesionesList : []).map((prof) => (
+                                                        <option key={prof} value={prof}>
+                                                            {prof}
+                                                        </option>
                                                     ))}
                                                 </select>
                                             </div>
@@ -366,8 +482,10 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
                                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:border-primary outline-none appearance-none cursor-pointer"
                                                 >
                                                     <option value="">Seleccionar Especialidad</option>
-                                                    {especialidadesList.map((esp) => (
-                                                        <option key={esp} value={esp}>{esp}</option>
+                                                    {(Array.isArray(especialidadesList) ? especialidadesList : []).map((esp) => (
+                                                        <option key={esp} value={esp}>
+                                                            {esp}
+                                                        </option>
                                                     ))}
                                                 </select>
                                             </div>
@@ -445,7 +563,9 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
                                                 >
                                                     <option value="">Seleccionar país</option>
                                                     {paisOptions.map((p) => (
-                                                        <option key={p} value={p}>{p}</option>
+                                                        <option key={p} value={p}>
+                                                            {p}
+                                                        </option>
                                                     ))}
                                                 </select>
                                             </div>
@@ -461,7 +581,9 @@ export default function EditUserModal({ isOpen, onClose, user, session }) {
                                                 >
                                                     <option value="">{pais ? "Seleccionar ciudad" : "Seleccionar país primero"}</option>
                                                     {ciudadOptions.map((c) => (
-                                                        <option key={c} value={c}>{c}</option>
+                                                        <option key={c} value={c}>
+                                                            {c}
+                                                        </option>
                                                     ))}
                                                 </select>
                                             </div>

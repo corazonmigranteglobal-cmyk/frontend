@@ -177,6 +177,7 @@ export default function UsersTable({
                 }}
                 user={editingUser}
                 session={session}
+                onUpdated={onRefresh}
             />
 
             {/* Deactivation Confirmation Modal */}
