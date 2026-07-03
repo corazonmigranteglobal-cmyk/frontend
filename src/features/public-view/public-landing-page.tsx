@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, HeartHandshake, LockKeyhole, MessageCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { fileServer } from "@/config/file-server";
-import type { LandingCard, LandingLink, LandingSection, NormalizedPublicLanding } from "@/features/public-view/public-view.types";
+import type { LandingLink, LandingSection, NormalizedPublicLanding } from "@/features/public-view/public-view.types";
 import { resolveLandingImage, resolveLogoUrl } from "@/features/public-view/public-view.normalizer";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
