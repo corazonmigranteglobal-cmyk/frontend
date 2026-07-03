@@ -1,100 +1,149 @@
-# Corazón Migrante – Frontend
+# Corazón Migrante Frontend — Reingeniería Next.js
 
-Este repositorio contiene el **frontend oficial de la plataforma Corazón Migrante**, desarrollado con **React + Vite**. El objetivo principal del frontend es ofrecer una experiencia clara, accesible y emocionalmente cuidada para personas migrantes y sus familias.
+Base nueva del frontend de **Corazón Migrante**, implementada desde cero con Next.js 15, TypeScript strict, Tailwind CSS, TanStack Query, React Hook Form, Zod y Jest.
 
-La aplicación se encarga de la **interfaz pública**, la navegación, los formularios y la comunicación con los servicios del backend.
+## Stack
 
----
+- Next.js 15 App Router
+- React 19
+- TypeScript strict
+- Tailwind CSS
+- Componentes estilo shadcn/Radix
+- TanStack Query
+- React Hook Form + Zod
+- Middleware + guards de cliente
+- Jest + Testing Library
+- ESLint + Prettier
 
-## 🧱 Tecnologías utilizadas
-
-- **React** – Construcción de interfaces de usuario
-- **Vite** – Entorno de desarrollo y build de alto rendimiento
-- **JavaScript (ESM)** – Módulos modernos
-- **ESLint** – Control de calidad y consistencia del código
-
----
-
-## 📁 Estructura del proyecto
-
-```text
-src/
-├── assets/            # Imágenes, íconos y recursos estáticos
-├── components/        # Componentes reutilizables
-├── modules/           # Módulos funcionales (landing, auth, vistas públicas, etc.)
-├── hooks/             # Custom hooks
-├── services/          # Comunicación con APIs
-├── helpers/           # Utilidades compartidas
-└── main.jsx           # Punto de entrada de la aplicación
-```
-
-Archivos principales en la raíz:
-- `index.html`
-- `vite.config.js`
-- `package.json`
-- `eslint.config.js`
-- `.gitignore`
-
----
-
-## ▶️ Ejecución en entorno de desarrollo
-
-Instalar dependencias:
+## Instalación
 
 ```bash
-npm install
+yarn install
+cp .env.example .env.local
+yarn dev
 ```
 
-Levantar el servidor de desarrollo:
+Por defecto, `yarn dev` intenta levantar el frontend en `http://localhost:4173`. Si el puerto está ocupado, busca automáticamente el siguiente puerto libre.
+
+El frontend requiere backend configurado. No se incluye modo de datos inventados para producción.
 
 ```bash
-npm run dev
+NEXT_PUBLIC_APP_URL=http://localhost:4173
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
 ```
 
-La aplicación estará disponible en:
-
-```
-http://localhost:5173
-```
-
----
-
-## 🏗️ Build para producción
-
-Para generar la versión optimizada de producción:
+## Comandos de calidad
 
 ```bash
-npm run build
+yarn lint
+yarn typecheck
+yarn test:unit
+yarn build
+yarn test:smoke
 ```
 
-El resultado se genera en la carpeta `dist/`, la cual **no se versiona** en el repositorio.
+Validación completa local/CI sin backend real:
 
----
-
-## 🔐 Variables de entorno
-
-Las variables de entorno no se suben al repositorio.
-
-Debe utilizarse un archivo `.env` local basado en:
-
-```
-.env.example
+```bash
+yarn test:ci
 ```
 
----
+Validación de integración real contra backend:
 
-## 🎯 Enfoque del proyecto
+```bash
+BACKEND_INTEGRATION_BASE_URL=http://localhost:3000 yarn test:integration:backend
+```
 
-El frontend de **Corazón Migrante** está diseñado con un enfoque humano y social, priorizando:
+Esta prueba falla si no existe URL de backend configurada. No usa mocks ni fixtures locales.
 
-- Claridad visual y accesibilidad
-- Buen rendimiento y tiempos de carga
-- Código modular y mantenible
-- Escalabilidad a largo plazo
+## Arquitectura
 
----
+```txt
+src/app              Rutas App Router
+src/features         Módulos de negocio
+src/shared/api       Cliente API, endpoints, normalizadores y errores
+src/shared/auth      Sesión normalizada, roles y guards
+src/shared/ui        Componentes base reutilizables
+tests/unit           Unitarias Jest
+tests/integration    Integración real contra backend
+docs                 Arquitectura, seguridad, API, testing y pendientes
+```
 
-## 📌 Notas finales
+## Rutas principales
 
-Este frontend está pensado para integrarse directamente con el backend del proyecto Corazón Migrante. Cualquier modificación debe respetar la estructura y las convenciones definidas en el proyecto.
+- `/`: landing pública
+- `/login`: login paciente
+- `/registro`: registro paciente
+- `/booking`: solicitud de cita
+- `/paciente`: portal paciente
+- `/terapeuta`: portal terapeuta
+- `/admin`: panel operativo
+- `/admin/contabilidad`: contabilidad protegida
 
+## Decisiones importantes
+
+- Se elimina la duplicidad de rutas administrativas del frontend anterior.
+- `role` y `permissions` son la fuente de verdad normalizada del frontend.
+- No se usa `sessionStorage` como cache de negocio.
+- No quedan tablas de negocio con filas hardcodeadas.
+- Las tablas administrativas consultan backend con búsqueda/filtros/paginación server-side.
+- Los pendientes quedan documentados en Markdown.
+
+## Pendientes
+
+Revisar `docs/pending/pending-items.md` antes de ajustar endpoints definitivos.
+
+
+## Segunda revisión
+
+Ver `SECOND_REVIEW_REPORT.md` para el detalle de la validación adicional contra el backend real y las correcciones aplicadas.
+
+
+## Landing configurable por Vistas Públicas
+
+La home `/` no usa mockups. Carga la configuración desde el backend usando la capa:
+
+```txt
+src/features/public-view/public-view.api.ts
+```
+
+Por defecto, para respetar el flujo real de Vistas Públicas, la variable histórica `NEXT_PUBLIC_PUBLIC_VIEW_SLUG` puede contener el ID de la vista:
+
+```env
+NEXT_PUBLIC_PUBLIC_VIEW_MODE=public-view-id
+NEXT_PUBLIC_PUBLIC_VIEW_SLUG=1
+NEXT_PUBLIC_PUBLIC_VIEW_ID=
+```
+
+Eso llama a:
+
+```txt
+GET /api/v1/public-views/1
+```
+
+También se soportan:
+
+```txt
+GET /api/v1/public/pages/:slug
+GET /api/v1/public/pages/by-id/:id
+GET /api/v1/public/pages/:slug/elements/:code
+GET /api/v1/public/page-elements/:id
+GET /api/v1/public-views/:id
+GET /api/v1/public-views/:id/elements/:code
+```
+
+Para cambiar el modo:
+
+```env
+NEXT_PUBLIC_PUBLIC_VIEW_MODE=page-by-id
+NEXT_PUBLIC_PUBLIC_VIEW_ID=1
+```
+
+O para slug real:
+
+```env
+NEXT_PUBLIC_PUBLIC_VIEW_MODE=page-slug
+NEXT_PUBLIC_PUBLIC_VIEW_SLUG=inicio
+```
+
+Si el backend no devuelve la vista configurada, la landing muestra un error claro y no renderiza contenido inventado.
