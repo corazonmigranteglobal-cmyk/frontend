@@ -1,3 +1,5 @@
+.git
+.gitignore
 node_modules
 .next
 out
@@ -8,12 +10,5 @@ test-results
 .env
 .env.local
 .env.*.local
-.DS_Store
 *.log
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions
+.DS_Store
